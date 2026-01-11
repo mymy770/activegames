@@ -1,6 +1,7 @@
 'use client'
 
 import { Check, Sparkles, Users, PartyPopper } from 'lucide-react'
+import Link from 'next/link'
 
 interface PricingSectionProps {
   translations: {
@@ -24,6 +25,9 @@ interface PricingSectionProps {
           features: string[]
         }[]
       }
+    }
+    booking?: {
+      order_now: string
     }
   }
   isRTL?: boolean
@@ -125,6 +129,18 @@ export default function PricingSection({ translations, isRTL }: PricingSectionPr
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Order Now Button */}
+        <div className="text-center mt-12">
+          <Link
+            href="/reservation"
+            className="glow-button inline-flex items-center gap-3 px-10 py-4 text-lg font-bold text-dark hover:scale-105 transition-transform duration-300"
+            style={{ fontFamily: 'Orbitron, sans-serif' }}
+          >
+            <Sparkles className="w-6 h-6" />
+            {translations.booking?.order_now || 'Order now'}
+          </Link>
         </div>
       </div>
       

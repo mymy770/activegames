@@ -179,5 +179,25 @@
     "games_title": "OUR GAMES",
     "concept_title": "CONCEPT",
     "pricing_title": "PRICING"
+  },
+  "booking": {
+    "order_now": "Order now",
+    "title": "Book your session",
+    "step1": {
+      "title": "Select branch",
+      "subtitle": "Choose the location where you want to play"
+    },
+    "step2": {
+      "title": "Select date",
+      "subtitle": "Choose the day for your session"
+    },
+    "step3": {
+      "title": "Select time",
+      "subtitle": "Choose the time slot"
+    },
+    "next": "Next",
+    "previous": "Previous",
+    "confirm": "Confirm booking",
+    "loading": "Loading..."
   }
 }

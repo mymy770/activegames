@@ -17,8 +17,6 @@ interface ContactSectionProps {
         send: string
       }
       info: {
-        address: string
-        venue: string
         phone: string
         email: string
       }

@@ -147,5 +147,25 @@
     "games_title": "NOS JEUX",
     "concept_title": "CONCEPT",
     "why_choose": "Pourquoi nous choisir ?"
+  },
+  "booking": {
+    "order_now": "Réserver maintenant",
+    "title": "Réservez votre session",
+    "step1": {
+      "title": "Sélectionner la succursale",
+      "subtitle": "Choisissez l'emplacement où vous souhaitez jouer"
+    },
+    "step2": {
+      "title": "Sélectionner la date",
+      "subtitle": "Choisissez le jour pour votre session"
+    },
+    "step3": {
+      "title": "Sélectionner l'heure",
+      "subtitle": "Choisissez le créneau horaire"
+    },
+    "next": "Suivant",
+    "previous": "Précédent",
+    "confirm": "Confirmer la réservation",
+    "loading": "Chargement..."
   }
 }
