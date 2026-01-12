@@ -102,6 +102,9 @@ export default function AdminPage() {
   const [userChangedColor, setUserChangedColor] = useState(false) // Suivre si l'utilisateur a modifié la couleur manuellement
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false) // Afficher la pop-up de confirmation de suppression
   const [appointmentToDelete, setAppointmentToDelete] = useState<string | null>(null) // ID du rendez-vous à supprimer
+  const [showOverlapConfirm, setShowOverlapConfirm] = useState(false) // Afficher la pop-up de confirmation de chevauchement
+  const [overlapInfo, setOverlapInfo] = useState<{ slotsNeeded: number; availableSlots: number; maxParticipants: number } | null>(null)
+  const [pendingSave, setPendingSave] = useState<(() => void) | null>(null) // Fonction de sauvegarde en attente
 
   const presetColors = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#a855f7', '#eab308']
 
@@ -1219,9 +1222,96 @@ export default function AdminPage() {
       }
       
       const maxParticipants = availableCount * 6
-      alert(`Pas assez de capacité sur ce créneau.\n\nIl faut ${slotsNeeded} slot(s) disponible(s), mais seulement ${availableCount} slot(s) sont libres.\n\nMaximum possible : ${maxParticipants} participants (${availableCount} slot(s) × 6 personnes).`)
+      
+      // Si aucun slot disponible, refuser
+      if (availableCount === 0) {
+        alert(`Impossible de créer ce rendez-vous. Aucun slot disponible sur ce créneau.`)
+        return
+      }
+      
+      // Demander autorisation pour chevauchement (le système déplacera les autres blocs si possible)
+      setOverlapInfo({
+        slotsNeeded,
+        availableSlots: availableCount,
+        maxParticipants
+      })
+      
+      // Stocker la fonction de sauvegarde pour l'appeler après confirmation
+      setPendingSave(() => () => {
+        // Le système va essayer de trouver des slots en déplaçant les autres blocs
+        // On utilise findAvailableSlots qui peut trouver des slots non consécutifs
+        // et compactSlots déplacera automatiquement les blocs en conflit
+        const slotsToUse = findAvailableSlots(
+          dateStr,
+          startMinutes,
+          gameDurationMinutes,
+          slotsNeeded,
+          editingAppointment?.id
+        )
+        
+        // Si toujours pas de slots, utiliser les slots disponibles et laisser compactSlots gérer
+        if (!slotsToUse) {
+          // Prendre les slots disponibles de gauche à droite
+          const partialSlots: number[] = []
+          for (let slot = 1; slot <= TOTAL_SLOTS && partialSlots.length < availableCount; slot++) {
+            let isAvailable = true
+            for (let min = startMinutes; min < startMinutes + gameDurationMinutes; min += 15) {
+              const isOccupied = appointments.some(a => {
+                if (a.id === editingAppointment?.id) return false
+                if (a.date !== dateStr) return false
+                const assignedSlots = a.assignedSlots || []
+                if (!assignedSlots.includes(slot)) return false
+                const aStart = a.hour * 60 + (a.minute || 0)
+                const aGameDuration = a.gameDurationMinutes || 60
+                const aEnd = aStart + aGameDuration
+                return aStart < min + 15 && aEnd > min
+              })
+              if (isOccupied) {
+                isAvailable = false
+                break
+              }
+            }
+            if (isAvailable) {
+              partialSlots.push(slot)
+            }
+          }
+          
+          // Compléter avec les slots manquants (seront gérés par compactSlots)
+          for (let slot = 1; slot <= TOTAL_SLOTS && partialSlots.length < slotsNeeded; slot++) {
+            if (!partialSlots.includes(slot)) {
+              partialSlots.push(slot)
+            }
+          }
+          
+          saveAppointmentWithSlots(partialSlots.slice(0, slotsNeeded))
+        } else {
+          saveAppointmentWithSlots(slotsToUse)
+        }
+      })
+      
+      setShowOverlapConfirm(true)
       return
     }
+    
+    // Si on a des slots disponibles, continuer normalement
+    saveAppointmentWithSlots(availableSlots)
+  }
+
+  // Fonction interne pour sauvegarder avec des slots spécifiques
+  const saveAppointmentWithSlots = (slotsToUse: number[]) => {
+    if (!appointmentTitle.trim() || appointmentHour === null || !appointmentDate) {
+      return
+    }
+    const dateStr = appointmentDate
+
+    // Calculer les minutes de début
+    const startMinutes = appointmentHour * 60 + appointmentMinute
+    
+    // IMPORTANT : Deux durées différentes
+    const gameDurationMinutes = appointmentGameDuration ?? 60
+    const eventDurationMinutes = (appointmentEventType && appointmentEventType !== 'game') 
+      ? (appointmentDuration ?? 120)
+      : gameDurationMinutes
 
     // Si ce n'est pas un "game", vérifier la disponibilité d'une salle d'anniversaire
     let assignedRoom: number | undefined = undefined
@@ -1280,7 +1370,7 @@ export default function AdminPage() {
           customerNotes: appointmentCustomerNotes || undefined,
           gameDurationMinutes: appointmentGameDuration ?? undefined,
           participants: appointmentParticipants ?? undefined,
-          assignedSlots: availableSlots,
+          assignedSlots: slotsToUse,
           assignedRoom: assignedRoom,
         }
         
@@ -1290,20 +1380,13 @@ export default function AdminPage() {
         )
         
         // Compacter les slots pour cette date (exclut le rendez-vous modifié)
+        // compactSlots déplacera automatiquement les blocs en conflit
         const compacted = compactSlots(dateStr, updated, editingAppointment.id)
         const otherDates = updated.filter(a => a.date !== dateStr)
         
         // IMPORTANT : Réintégrer le rendez-vous modifié après la compaction
         // La compaction peut avoir déplacé d'autres rendez-vous, mais le rendez-vous modifié doit être inclus
-        const finalAppointments = [...otherDates, ...compacted, updatedAppointment]
-        
-        // Vérifier les chevauchements finaux et afficher une alerte si nécessaire
-        const conflicts = detectOverlaps(finalAppointments.filter(a => a.date === dateStr))
-        if (conflicts.length > 0) {
-          alert(`Attention : ${conflicts.length} chevauchement(s) détecté(s) sur cette date. Veuillez vérifier l'agenda.`)
-        }
-        
-        return finalAppointments
+        return [...otherDates, ...compacted, updatedAppointment]
       })
     } else {
       const newAppointment: SimpleAppointment = {
@@ -1327,7 +1410,7 @@ export default function AdminPage() {
         customerNotes: appointmentCustomerNotes || undefined,
         gameDurationMinutes: appointmentGameDuration ?? undefined,
         participants: appointmentParticipants ?? undefined,
-        assignedSlots: availableSlots,
+        assignedSlots: slotsToUse,
         assignedRoom: assignedRoom,
       }
       
@@ -1336,19 +1419,12 @@ export default function AdminPage() {
         const withNew = [...prev, newAppointment]
         
         // Compacter les slots pour cette date
+        // compactSlots déplacera automatiquement les blocs en conflit
         const compacted = compactSlots(dateStr, withNew)
         const otherDates = withNew.filter(a => a.date !== dateStr)
         
         // Fusionner les rendez-vous compactés avec les autres dates
-        const finalAppointments = [...otherDates, ...compacted]
-        
-        // Vérifier les chevauchements finaux et afficher une alerte si nécessaire
-        const conflicts = detectOverlaps(finalAppointments.filter(a => a.date === dateStr))
-        if (conflicts.length > 0) {
-          alert(`Attention : ${conflicts.length} chevauchement(s) détecté(s) sur cette date. Veuillez vérifier l'agenda.`)
-        }
-        
-        return finalAppointments
+        return [...otherDates, ...compacted]
       })
     }
 
@@ -2698,6 +2774,66 @@ export default function AdminPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Modal de confirmation de chevauchement - centré sur la pop-up du rendez-vous */}
+                    {showOverlapConfirm && overlapInfo && (
+                      <div
+                        className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center rounded-2xl"
+                        onClick={() => {
+                          setShowOverlapConfirm(false)
+                          setOverlapInfo(null)
+                          setPendingSave(null)
+                        }}
+                      >
+                        <div
+                          data-overlap-confirm-modal
+                          className={`${bgCard} border ${borderColor} rounded-2xl shadow-xl w-full max-w-md p-6 flex flex-col pointer-events-auto mx-4`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <h3 className={`text-xl font-bold mb-4 ${textPrimary}`}>
+                            Pas assez de slots disponibles
+                          </h3>
+                          
+                          <p className={`${textSecondary} mb-4`}>
+                            Ce rendez-vous nécessite <strong>{overlapInfo.slotsNeeded} slot(s)</strong>, mais seulement <strong>{overlapInfo.availableSlots} slot(s)</strong> sont disponibles.
+                          </p>
+                          
+                          <p className={`${textSecondary} mb-6`}>
+                            Maximum possible : <strong>{overlapInfo.maxParticipants} participants</strong> ({overlapInfo.availableSlots} slot(s) × 6 personnes).
+                          </p>
+                          
+                          <p className={`${textSecondary} mb-6 text-sm`}>
+                            Si vous acceptez, le système déplacera automatiquement les autres rendez-vous pour libérer les slots nécessaires.
+                          </p>
+
+                          <div className="flex gap-3 justify-end">
+                            <button
+                              onClick={() => {
+                                setShowOverlapConfirm(false)
+                                setOverlapInfo(null)
+                                setPendingSave(null)
+                              }}
+                              className={`px-4 py-2 rounded-lg border ${borderColor} text-sm ${textSecondary} hover:${bgCardHover} transition-all min-w-[120px]`}
+                            >
+                              Refuser
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (pendingSave) {
+                                  pendingSave()
+                                }
+                                setShowOverlapConfirm(false)
+                                setOverlapInfo(null)
+                                setPendingSave(null)
+                              }}
+                              className="px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-all min-w-[120px]"
+                            >
+                              Accepter
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Modal de confirmation de suppression - centré sur la pop-up du rendez-vous */}
                     {showDeleteConfirm && (
