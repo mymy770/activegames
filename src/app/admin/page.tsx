@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Grid, CalendarDays, Sun, Moon, Settings } from 'lucide-react'
+import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Grid, CalendarDays, Sun, Moon, Settings, Trash2 } from 'lucide-react'
 import { Reservation } from '@/lib/reservations'
 
 type SortField = 'reservationNumber' | 'date' | 'time' | 'firstName' | 'lastName' | 'phone' | 'branch' | 'type' | 'players' | 'status'
@@ -255,6 +255,17 @@ export default function AdminPage() {
     setAllReservations([])
   }
 
+  // Fonction pour vider tous les événements
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const clearAllAppointments = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('admin_simple_appointments')
+      setAppointments([])
+      console.log('Tous les événements ont été supprimés du localStorage et de l\'état.')
+      setShowClearConfirm(false)
+    }
+  }
+
   const loadReservations = async () => {
     setLoading(true)
     setError(null)
@@ -407,6 +418,46 @@ export default function AdminPage() {
 
   const handleColumnFilter = (field: 'status' | 'branch' | 'type', value: string) => {
     setColumnFilters({ ...columnFilters, [field]: value })
+  }
+
+  // Générer le titre de l'événement à partir du prénom et nom
+  const generateAppointmentTitle = (firstName?: string, lastName?: string): string => {
+    const first = firstName?.trim() || ''
+    const last = lastName?.trim() || ''
+    if (first && last) {
+      return `${first} ${last}`
+    } else if (first) {
+      return first
+    } else if (last) {
+      return last
+    }
+    return 'Nouvel événement'
+  }
+
+  // Formater l'affichage de l'événement dans l'agenda
+  const formatAppointmentDisplay = (appointment: SimpleAppointment): string => {
+    const name = generateAppointmentTitle(appointment.customerFirstName, appointment.customerLastName)
+    const participants = appointment.participants ? `${appointment.participants} pers.` : ''
+    const time = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
+    
+    let display = name
+    if (participants) {
+      display += ` - ${participants}`
+    }
+    display += ` - ${time}`
+    return display
+  }
+
+  // Formater l'affichage pour les salles (avec retour à la ligne)
+  const formatAppointmentDisplayForRooms = (appointment: SimpleAppointment) => {
+    const name = generateAppointmentTitle(appointment.customerFirstName, appointment.customerLastName)
+    const participants = appointment.participants ? `${appointment.participants} pers.` : ''
+    const time = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
+    
+    return {
+      name,
+      details: participants ? `${participants} - ${time}` : time
+    }
   }
 
   const handlePreviousWeek = () => {
@@ -1083,7 +1134,7 @@ export default function AdminPage() {
             for (let startSlot = 1; startSlot <= TOTAL_SLOTS - existingSlotsNeeded + 1; startSlot++) {
               const candidateSlots = Array.from({ length: existingSlotsNeeded }, (_, i) => startSlot + i)
               // Vérifier que ces slots ne sont pas dans les slots qu'on va assigner
-              if (bestSlots && !candidateSlots.some(slot => bestSlots.includes(slot)) && areSlotsAvailable(candidateSlots, existingStart, existingEnd, conflict.appointment.id)) {
+              if (bestSlots && !candidateSlots.some(slot => bestSlots!.includes(slot)) && areSlotsAvailable(candidateSlots, existingStart, existingEnd, conflict.appointment.id)) {
                 newSlots = candidateSlots
                 break
               }
@@ -1215,7 +1266,20 @@ export default function AdminPage() {
         
         // Prendre les slots disponibles (même si non consécutifs ou insuffisants)
         // Mais JAMAIS de chevauchement physique
-        const finalSlots = availableSlots.length > 0 ? availableSlots : (appointment.assignedSlots || [])
+        // Si on a des slots disponibles, prendre au maximum slotsNeeded slots
+        // Si on n'a pas assez de slots disponibles, prendre ceux qu'on a (mais marquer comme insuffisant)
+        let finalSlots: number[] = []
+        if (availableSlots.length > 0) {
+          // Prendre au maximum slotsNeeded slots, ou tous les disponibles si moins
+          finalSlots = availableSlots.slice(0, slotsNeeded)
+        } else if (appointment.assignedSlots && appointment.assignedSlots.length > 0) {
+          // Si pas de slots disponibles, garder les slots assignés précédemment
+          finalSlots = appointment.assignedSlots.slice(0, slotsNeeded)
+        } else {
+          // Si rien, assigner les premiers slots (même s'ils sont occupés, on les marquera comme insuffisants)
+          finalSlots = Array.from({ length: Math.min(slotsNeeded, TOTAL_SLOTS) }, (_, i) => i + 1)
+        }
+        
         const sortedFinalSlots = finalSlots.sort((a, b) => a - b)
         
         // Vérifier si les slots sont consécutifs et si on a le bon nombre
@@ -1520,7 +1584,7 @@ export default function AdminPage() {
 
   const openEditAppointmentModal = (appointment: SimpleAppointment) => {
     setEditingAppointment(appointment)
-    setAppointmentTitle(appointment.title)
+    // Ne plus charger le titre, il sera généré automatiquement
     setAppointmentHour(appointment.hour)
     setAppointmentMinute(appointment.minute || 0)
     setAppointmentDate(appointment.date)
@@ -1589,7 +1653,8 @@ export default function AdminPage() {
   // Fonction helper pour sauvegarder avec une salle assignée (utilisée après confirmation de capacité)
   // Cette fonction est appelée APRÈS autorisation, donc on skip les vérifications de capacité
   const saveAppointmentWithRoom = (slotsToUse: number[], roomToAssign: number) => {
-    if (!appointmentTitle.trim() || appointmentHour === null || !appointmentDate) {
+    // Vérifier que prénom ou nom est rempli au lieu du titre
+    if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
     }
     const dateStr = appointmentDate
@@ -1603,7 +1668,7 @@ export default function AdminPage() {
       setAppointments(prev => {
         const updatedAppointment: SimpleAppointment = {
           ...editingAppointment,
-          title: appointmentTitle.trim(),
+          title: generateAppointmentTitle(appointmentCustomerFirstName, appointmentCustomerLastName),
           hour: appointmentHour,
           minute: appointmentMinute,
           date: dateStr,
@@ -1636,7 +1701,7 @@ export default function AdminPage() {
     } else {
       const newAppointment: SimpleAppointment = {
         id: `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: appointmentTitle.trim(),
+        title: generateAppointmentTitle(appointmentCustomerFirstName, appointmentCustomerLastName),
         hour: appointmentHour,
         minute: appointmentMinute,
         date: dateStr,
@@ -1668,13 +1733,27 @@ export default function AdminPage() {
     
     setShowAppointmentModal(false)
     setEditingAppointment(null)
-    resetAppointmentForm()
+    setAppointmentTitle('')
+    setAppointmentHour(null)
+    setAppointmentDate('')
+    setAppointmentCustomerFirstName('')
+    setAppointmentCustomerLastName('')
+    setAppointmentParticipants(null)
+    setAppointmentEventType('')
+    setAppointmentGameDuration(60)
+    setAppointmentDuration(60)
+    setAppointmentBranch('')
+    setAppointmentEventNotes('')
+    setAppointmentCustomerPhone('')
+    setAppointmentCustomerEmail('')
+    setAppointmentCustomerNotes('')
   }
 
   // Fonction interne pour sauvegarder avec des slots spécifiques
   // DOIT être définie AVANT saveAppointment car elle est utilisée dans pendingSave
   const saveAppointmentWithSlots = (slotsToUse: number[]) => {
-    if (!appointmentTitle.trim() || appointmentHour === null || !appointmentDate) {
+    // Vérifier que prénom ou nom est rempli au lieu du titre
+    if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
     }
     const dateStr = appointmentDate
@@ -1788,7 +1867,7 @@ export default function AdminPage() {
         // Mettre à jour le rendez-vous modifié
         const updatedAppointment: SimpleAppointment = {
           ...editingAppointment,
-          title: appointmentTitle.trim(),
+          title: generateAppointmentTitle(appointmentCustomerFirstName, appointmentCustomerLastName),
           hour: appointmentHour,
           minute: appointmentMinute,
           date: dateStr,
@@ -1827,7 +1906,7 @@ export default function AdminPage() {
     } else {
       const newAppointment: SimpleAppointment = {
         id: `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: appointmentTitle.trim(),
+        title: generateAppointmentTitle(appointmentCustomerFirstName, appointmentCustomerLastName),
         hour: appointmentHour,
         minute: appointmentMinute,
         date: dateStr,
@@ -1966,7 +2045,8 @@ export default function AdminPage() {
   }
 
   const saveAppointment = () => {
-    if (!appointmentTitle.trim() || appointmentHour === null || !appointmentDate) {
+    // Vérifier que prénom ou nom est rempli au lieu du titre
+    if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
     }
     const dateStr = appointmentDate
@@ -2217,6 +2297,14 @@ export default function AdminPage() {
               ) : (
                 <Sun className="w-5 h-5 text-yellow-400" />
               )}
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className={`px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-all text-base text-red-500 flex items-center gap-2`}
+              title="Vider tous les événements"
+            >
+              <Trash2 className="w-4 h-4" />
+              Vider événements
             </button>
             <button
               onClick={handleLogout}
@@ -2797,7 +2885,7 @@ export default function AdminPage() {
                 <div
                   className="grid sticky top-0 z-10"
                   style={{
-                    gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
+                    gridTemplateColumns: `${Array(TOTAL_SLOTS).fill('1fr').join(' ')} 2px ${Array(TOTAL_ROOMS).fill('1fr').join(' ')}`,
                     height: `${rowHeight}px`,
                     minHeight: `${rowHeight}px`,
                   }}
@@ -2814,6 +2902,9 @@ export default function AdminPage() {
                       </div>
                     )
                   })}
+
+                  {/* Ligne de séparation entre slots et salles */}
+                  <div className={`${bgHeader} border-b ${borderColor} bg-gray-400/30`} style={{ borderRight: '2px solid #9ca3af' }} />
 
                   {/* Colonnes salles d'anniversaire */}
                   {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
@@ -2884,7 +2975,7 @@ export default function AdminPage() {
                       key={`time-row-${hour}-${minute}`}
                       className="grid absolute w-full"
                       style={{
-                        gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
+                        gridTemplateColumns: `${Array(TOTAL_SLOTS).fill('1fr').join(' ')} 2px ${Array(TOTAL_ROOMS).fill('1fr').join(' ')}`,
                         top: `${rowHeight + timeIndex * (rowHeight / 2)}px`,
                         height: `${rowHeight / 2}px`,
                       }}
@@ -2904,6 +2995,9 @@ export default function AdminPage() {
                           />
                         )
                       })}
+
+                      {/* Ligne de séparation entre slots et salles */}
+                      <div className={`border-b ${borderColor} bg-gray-400/30`} style={{ borderRight: '2px solid #9ca3af' }} />
 
                       {/* Colonnes salles d'anniversaire */}
                       {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
@@ -2958,7 +3052,20 @@ export default function AdminPage() {
                         }
                         
                         // Calculer la position et largeur : le bloc commence au premier slot et s'étend sur tous les slots assignés
-                        const startCol = minSlot - 1 // 0-indexed (slot 1 = colonne 0)
+                        // La grille a : TOTAL_SLOTS colonnes (1fr chacune) + 1 colonne séparation (2px) + TOTAL_ROOMS colonnes (1fr chacune)
+                        // Avec CSS Grid, les colonnes 1fr sont calculées après avoir soustrait les colonnes fixes (2px)
+                        // Pour positionner avec position: absolute, on utilise calc() pour tenir compte de la colonne de séparation
+                        // Position dans la zone des slots (0 à 100% de la zone slots)
+                        const startInSlots = (minSlot - 1) / TOTAL_SLOTS
+                        const widthInSlots = widthCols / TOTAL_SLOTS
+                        
+                        // Calculer la largeur relative des slots (en négligeant les 2px qui sont négligeables)
+                        const totalFr = TOTAL_SLOTS + TOTAL_ROOMS
+                        const slotsWidthPercent = (TOTAL_SLOTS / totalFr) * 100
+                        
+                        // Position absolue dans la grille totale
+                        const leftPercent = startInSlots * slotsWidthPercent
+                        const widthPercent = widthInSlots * slotsWidthPercent
                         
                         // Utiliser toujours la couleur normale de l'événement
                         const displayColor = getFullColor(appointment.color)
@@ -2974,8 +3081,8 @@ export default function AdminPage() {
                             }}
                             className="rounded text-xs font-medium hover:opacity-90 transition-all overflow-hidden flex flex-col justify-center px-2 absolute"
                             style={{
-                              left: `${(startCol / TOTAL_COLUMNS) * 100}%`,
-                              width: `${(widthCols / TOTAL_COLUMNS) * 100}%`,
+                              left: `${leftPercent}%`,
+                              width: `${widthPercent}%`,
                               top: 0,
                               height: `${durationIn15MinSlots * (rowHeight / 2)}px`,
                               backgroundColor: displayColor,
@@ -2984,10 +3091,10 @@ export default function AdminPage() {
                               zIndex: 10,
                               boxSizing: 'border-box',
                             }}
-                            title={appointment.title}
+                            title={formatAppointmentDisplay(appointment)}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span className="truncate font-medium text-white">{appointment.title}</span>
+                              <span className="truncate font-medium text-white">{formatAppointmentDisplay(appointment)}</span>
                             </div>
                           </div>
                         )
@@ -3026,8 +3133,20 @@ export default function AdminPage() {
                           return `rgb(${darkerR}, ${darkerG}, ${darkerB})`
                         }
                         
-                        // Position dans les colonnes de salles (après les slots)
-                        const roomCol = TOTAL_SLOTS + (assignedRoom - 1) // Colonne après les slots
+                        // Position dans les colonnes de salles (après les slots + séparation de 2px)
+                        // La grille a : TOTAL_SLOTS colonnes (1fr chacune) + 1 colonne séparation (2px) + TOTAL_ROOMS colonnes (1fr chacune)
+                        // Pour calculer les pourcentages, on doit tenir compte que la colonne de séparation est fixe (2px)
+                        const totalFr = TOTAL_SLOTS + TOTAL_ROOMS
+                        const slotsWidthPercent = (TOTAL_SLOTS / totalFr) * 100
+                        const roomsWidthPercent = (TOTAL_ROOMS / totalFr) * 100
+                        
+                        // Position dans la zone des salles (0 à 100% de la zone salles)
+                        const startInRooms = (assignedRoom - 1) / TOTAL_ROOMS
+                        const widthInRooms = 1 / TOTAL_ROOMS
+                        
+                        // Position absolue dans la grille totale : après les slots + séparation
+                        const leftPercent = slotsWidthPercent + (startInRooms * roomsWidthPercent)
+                        const widthPercent = widthInRooms * roomsWidthPercent
                         
                         return (
                           <div
@@ -3037,10 +3156,10 @@ export default function AdminPage() {
                               e.stopPropagation()
                               openEditAppointmentModal(appointment)
                             }}
-                            className="rounded text-xs font-medium hover:opacity-90 transition-all overflow-hidden flex flex-col justify-center px-2 absolute"
+                            className="rounded text-sm font-medium hover:opacity-90 transition-all overflow-hidden flex flex-col justify-center px-2 py-1 absolute items-center justify-center"
                             style={{
-                              left: `${(roomCol / TOTAL_COLUMNS) * 100}%`,
-                              width: `${(1 / TOTAL_COLUMNS) * 100}%`,
+                              left: `${leftPercent}%`,
+                              width: `${widthPercent}%`,
                               top: 0,
                               height: `${durationIn15MinSlots * (rowHeight / 2)}px`,
                               backgroundColor: getFullColor(appointment.color),
@@ -3049,10 +3168,24 @@ export default function AdminPage() {
                               zIndex: 10,
                               boxSizing: 'border-box',
                             }}
-                            title={appointment.title}
+                            title={formatAppointmentDisplay(appointment)}
                           >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="truncate font-medium text-white">{appointment.title}</span>
+                            <div className="flex flex-col gap-1 w-full items-center justify-center text-center">
+                              {(() => {
+                                const display = formatAppointmentDisplayForRooms(appointment)
+                                return (
+                                  <>
+                                    <span className="font-medium text-white break-words whitespace-normal leading-tight text-sm">
+                                      {display.name}
+                                    </span>
+                                    {display.details && (
+                                      <span className="text-white/90 text-xs break-words whitespace-normal leading-tight">
+                                        {display.details}
+                                      </span>
+                                    )}
+                                  </>
+                                )
+                              })()}
                             </div>
                           </div>
                         )
@@ -3062,6 +3195,32 @@ export default function AdminPage() {
                 })}
               </div>
             </div>
+
+            {/* Modal de confirmation pour vider tous les événements */}
+            {showClearConfirm && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+                <div className={`${bgCard} rounded-lg p-6 max-w-md w-full border ${borderColor}`}>
+                  <h3 className={`text-lg font-bold mb-4 ${textPrimary}`}>Confirmer la suppression</h3>
+                  <p className={`${textSecondary} mb-6`}>
+                    Êtes-vous sûr de vouloir supprimer tous les événements ? Cette action est irréversible.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setShowClearConfirm(false)}
+                      className={`px-4 py-2 ${bgCardHover} border ${borderColor} rounded-lg hover:opacity-80 transition-all`}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={clearAllAppointments}
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all"
+                    >
+                      Supprimer tout
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal création / édition de rendez-vous simples */}
             {showAppointmentModal && (
@@ -3104,7 +3263,7 @@ export default function AdminPage() {
                         if (target.tagName === 'TEXTAREA') return
                         
                         // Vérifier que les champs requis sont remplis
-                        if (appointmentTitle.trim() && appointmentHour !== null && appointmentDate) {
+                                  if ((appointmentCustomerFirstName?.trim() || appointmentCustomerLastName?.trim()) && appointmentHour !== null && appointmentDate) {
                           e.preventDefault()
                           saveAppointment()
                         }
@@ -3233,25 +3392,6 @@ export default function AdminPage() {
                             </div>
                           )}
 
-                          <div>
-                            <label className={`block text-sm mb-1 ${textSecondary}`}>Titre / Nom de l'événement</label>
-                            <input
-                              type="text"
-                              value={appointmentTitle}
-                              onChange={(e) => setAppointmentTitle(e.target.value)}
-                              onKeyDown={(e) => {
-                                // Si on appuie sur Entrée, sauvegarder (sauf si Shift+Entrée pour textarea)
-                                if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                                  if (appointmentTitle.trim() && appointmentHour !== null && appointmentDate) {
-                                    e.preventDefault()
-                                    saveAppointment()
-                                  }
-                                }
-                              }}
-                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
-                              placeholder="Anniversaire Emma, Équipe marketing, etc."
-                            />
-                          </div>
 
                           <div>
                             <label className={`block text-sm mb-1 ${textSecondary}`}>Couleur</label>
@@ -3404,7 +3544,7 @@ export default function AdminPage() {
                         </button>
                         <button
                           onClick={saveAppointment}
-                          disabled={!appointmentTitle.trim() || appointmentHour === null || !appointmentDate}
+                          disabled={(!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate}
                           className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all min-w-[140px]"
                         >
                           Enregistrer
