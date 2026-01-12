@@ -2496,13 +2496,28 @@ export default function AdminPage() {
             {/* Modal de confirmation de suppression */}
             {showDeleteConfirm && (
               <div
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center"
                 onClick={cancelDelete}
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
                 <div
                   data-delete-confirm-modal
                   className={`${bgCard} border ${borderColor} rounded-2xl shadow-xl w-full max-w-md p-6 flex flex-col pointer-events-auto`}
                   onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'relative',
+                    maxHeight: '90vh',
+                    overflow: 'auto',
+                  }}
                 >
                   <h3 className={`text-xl font-bold mb-4 ${textPrimary}`}>
                     Confirmer la suppression
