@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Grid, CalendarDays, Sun, Moon, Settings, Trash2 } from 'lucide-react'
 import { Reservation } from '@/lib/reservations'
+// Scheduler imports
+import { placeGameBooking, placeEventBooking, validateNoOverlap } from '@/lib/scheduler/engine'
+import { toRoomConfigs, toBooking, fromBooking } from '@/lib/scheduler/adapters'
+import type { Booking } from '@/lib/scheduler/types'
+import { requiresConfirmation, getConflictDetails } from '@/lib/scheduler/exceptions'
 
 type SortField = 'reservationNumber' | 'date' | 'time' | 'firstName' | 'lastName' | 'phone' | 'branch' | 'type' | 'players' | 'status'
 type SortDirection = 'asc' | 'desc' | null
@@ -30,7 +35,11 @@ type SimpleAppointment = {
   participants?: number
   assignedSlots?: number[] // Indices des slots assignés (1-14)
   assignedRoom?: number // Salle d'anniversaire assignée (1-4), undefined si pas de salle
-  hasInsufficientSlots?: boolean // true si l'événement n'a pas assez de slots (surplus, couleur différente)
+  // Exceptions/confirmations
+  surbooked?: boolean
+  surbookedParticipants?: number
+  roomOvercap?: boolean
+  roomOvercapParticipants?: number
 }
 
 export default function AdminPage() {
@@ -193,7 +202,7 @@ export default function AdminPage() {
             ...a,
             color: a.color || '#3b82f6',
             durationMinutes: a.durationMinutes ?? 60,
-            hasInsufficientSlots: a.hasInsufficientSlots ?? false,
+            // hasInsufficientSlots supprimé
             // S'assurer que assignedSlots est un tableau valide ou undefined
             assignedSlots: a.assignedSlots && a.assignedSlots.length > 0 
               ? a.assignedSlots.filter(slot => slot >= 1 && slot <= TOTAL_SLOTS)
@@ -792,7 +801,18 @@ export default function AdminPage() {
     return overlaps
   }
 
-  // Compacter les slots : déplacer les rendez-vous pour remplir les trous à gauche
+  // Guard dev : assertNoOverlap après chaque placement
+  const assertNoOverlap = (bookings: Booking[], date: string, context: string) => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      const validation = validateNoOverlap(bookings, date)
+      if (!validation.valid) {
+        console.error(`[SCHEDULER] Overlap détecté dans ${context}:`, validation.conflicts)
+        // Ne pas throw en production, juste logger
+      }
+    }
+  }
+
+  // Compacter les slots : utilise le scheduler engine
   // RÈGLE TETRIS : Aucun bloc ne peut entrer dans un autre bloc
   // Si conflit détecté, déplacer automatiquement les rendez-vous existants
   const compactSlots = (date: string, allAppointments: SimpleAppointment[], excludeAppointmentId?: string): SimpleAppointment[] => {
@@ -803,270 +823,65 @@ export default function AdminPage() {
 
     if (dateAppointments.length === 0) return []
 
-    // Trier par heure de début (plus tôt d'abord)
-    dateAppointments.sort((a, b) => {
-      const aStart = a.hour * 60 + (a.minute || 0)
-      const bStart = b.hour * 60 + (b.minute || 0)
+    // Convertir en Bookings et trier par heure
+    const bookings: Booking[] = dateAppointments.map(toBooking).sort((a, b) => {
+      const aStart = a.hour * 60 + a.minute
+      const bStart = b.hour * 60 + b.minute
       return aStart - bStart
     })
 
-    // Carte pour suivre quels slots sont occupés à quels moments
-    const slotUsage: Map<number, Set<number>> = new Map()
-    for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
-      slotUsage.set(slot, new Set())
-    }
+    // Réorganiser tous les bookings en utilisant le scheduler
+    // On les replace un par un dans l'ordre chronologique
+    const reorganizedBookings: Booking[] = []
+    const roomConfigs = toRoomConfigs(roomCapacities)
 
-    // Traiter chaque événement dans l'ordre chronologique
-    const compactedAppointments: SimpleAppointment[] = []
-
-    // Fonction simple : vérifier si des slots sont libres (pas de chevauchement physique)
-    const areSlotsFree = (slots: number[], startMinutes: number, endMinutes: number, excludeId?: string): boolean => {
-      // Vérifier dans slotUsage
-      for (const slot of slots) {
-        const occupied = slotUsage.get(slot)
-        if (occupied) {
-          for (let min = startMinutes; min < endMinutes; min += 15) {
-            if (occupied.has(min)) return false
-          }
-        }
+    for (const booking of bookings) {
+      // Si le booking a déjà des slots assignés, on les garde temporairement
+      // mais on va le replacer pour s'assurer qu'il n'y a pas de conflit
+      const params = {
+        date: booking.date,
+        hour: booking.hour,
+        minute: booking.minute,
+        participants: booking.participants,
+        type: booking.type,
+        durationMinutes: booking.durationMinutes,
+        gameDurationMinutes: booking.gameDurationMinutes,
+        excludeBookingId: booking.id // Exclure ce booking lui-même
       }
-      
-      // Vérifier dans les événements déjà placés
-      for (const existing of compactedAppointments) {
-        if (existing.id === excludeId) continue
-        const existingStart = existing.hour * 60 + (existing.minute || 0)
-        const existingDuration = existing.gameDurationMinutes || existing.durationMinutes || 60
-        const existingEnd = existingStart + existingDuration
-        const existingSlots = existing.assignedSlots || []
-        
-        if (existingSlots.length === 0) continue
-        
-        const timeOverlap = existingStart < endMinutes && existingEnd > startMinutes
-        if (timeOverlap && slots.some(s => existingSlots.includes(s))) {
-          return false // CONFLIT PHYSIQUE
-        }
-      }
-      
-      return true
-    }
 
-    // Fonction simple : réserver des slots
-    const reserve = (slots: number[], startMinutes: number, endMinutes: number) => {
-      for (const slot of slots) {
-        let occupied = slotUsage.get(slot)
-        if (!occupied) {
-          occupied = new Set()
-          slotUsage.set(slot, occupied)
+      let result
+      if (booking.type === 'event') {
+        result = placeEventBooking(reorganizedBookings, params, roomConfigs, false)
+      } else {
+        result = placeGameBooking(reorganizedBookings, params, true, false) // allowSplit pour GAME
+      }
+
+      if (result.success && result.allocation) {
+        // Mettre à jour le booking avec la nouvelle allocation
+        const updatedBooking: Booking = {
+          ...booking,
+          assignedSlots: result.allocation.slotAllocation?.slots,
+          assignedRoom: result.allocation.roomAllocation?.roomId
         }
-        for (let min = startMinutes; min < endMinutes; min += 15) {
-          occupied.add(min)
-        }
+        reorganizedBookings.push(updatedBooking)
+      } else {
+        // Si le placement échoue, garder le booking tel quel (avec ses slots existants)
+        // Mais on ne devrait jamais arriver ici si le booking était déjà placé
+        reorganizedBookings.push(booking)
       }
     }
 
-    // Fonction simple : libérer des slots
-    const release = (slots: number[], startMinutes: number, endMinutes: number) => {
-      for (const slot of slots) {
-        const occupied = slotUsage.get(slot)
-        if (occupied) {
-          for (let min = startMinutes; min < endMinutes; min += 15) {
-            occupied.delete(min)
-          }
-        }
-      }
-    }
+    // Guard : vérifier qu'il n'y a pas de chevauchement
+    assertNoOverlap(reorganizedBookings, date, 'compactSlots')
 
-    // Fonction simple : déplacer un événement vers la droite pour libérer des slots
-    const shiftAppointmentRight = (apptIndex: number, targetSlots: number[]): boolean => {
-      const appt = compactedAppointments[apptIndex]
-      const apptSlots = appt.assignedSlots || []
-      if (apptSlots.length === 0) return false
-      
-      const maxTarget = Math.max(...targetSlots)
-      const minAppt = Math.min(...apptSlots)
-      
-      if (minAppt > maxTarget) return true // Déjà après
-      
-      const shift = maxTarget - minAppt + 1
-      const newSlots = apptSlots.map(s => s + shift).sort((a, b) => a - b)
-      const maxNew = Math.max(...newSlots)
-      
-      if (maxNew > TOTAL_SLOTS) return false // Hors limites
-      
-      // Vérifier si les nouveaux slots sont libres
-      // Utiliser le temps de jeu centré pour les slots
-      const { gameStartMinutes: apptGameStart, gameDurationMinutes: apptGameDuration } = calculateCenteredGameTime(appt)
-      const apptGameEnd = apptGameStart + apptGameDuration
-      
-      if (!areSlotsFree(newSlots, apptGameStart, apptGameEnd, appt.id)) {
-        // Les nouveaux slots sont occupés, déplacer récursivement
-        for (let i = 0; i < compactedAppointments.length; i++) {
-          if (i === apptIndex) continue
-          const other = compactedAppointments[i]
-          const otherSlots = other.assignedSlots || []
-          if (otherSlots.length === 0) continue
-          
-          // Calculer le temps de jeu centré pour l'autre événement
-          const { gameStartMinutes: otherGameStart, gameDurationMinutes: otherGameDuration } = calculateCenteredGameTime(other)
-          const otherEnd = otherGameStart + otherGameDuration
-          
-          const timeOverlap = otherGameStart < apptGameEnd && otherEnd > apptGameStart
-          if (timeOverlap && newSlots.some(s => otherSlots.includes(s))) {
-            if (!shiftAppointmentRight(i, newSlots)) return false
-          }
-        }
-      }
-      
-      // Maintenant déplacer (utiliser les variables déjà déclarées)
-      release(apptSlots, apptGameStart, apptGameEnd)
-      reserve(newSlots, apptGameStart, apptGameEnd)
-      compactedAppointments[apptIndex] = { ...appt, assignedSlots: newSlots }
-      return true
-    }
-
-    // Traiter chaque événement dans l'ordre chronologique
-    for (const appointment of dateAppointments) {
-      // Calculer le temps de jeu centré si l'événement a une salle
-      const { gameStartMinutes, gameDurationMinutes } = calculateCenteredGameTime(appointment)
-      const endMinutes = gameStartMinutes + gameDurationMinutes
-      const slotsNeeded = (appointment.assignedSlots && appointment.assignedSlots.length > 0)
-        ? appointment.assignedSlots.length 
-        : calculateSlotsNeeded(appointment.participants)
-      
-      let assignedSlots: number[] | null = null
-      
-      // RÈGLE SIMPLE : Chercher des slots consécutifs de gauche à droite
-      for (let startSlot = 1; startSlot <= TOTAL_SLOTS - slotsNeeded + 1; startSlot++) {
-        const candidateSlots = Array.from({ length: slotsNeeded }, (_, i) => startSlot + i)
-        
-        // Vérifier si ces slots sont libres
-        if (areSlotsFree(candidateSlots, gameStartMinutes, endMinutes, appointment.id)) {
-          assignedSlots = candidateSlots
-          break
-        }
-        
-        // Si pas libres, identifier les événements qui bloquent
-        const blockers: number[] = [] // indices dans compactedAppointments
-        for (let i = 0; i < compactedAppointments.length; i++) {
-          const existing = compactedAppointments[i]
-          // Calculer le temps de jeu centré pour l'événement existant
-          const { gameStartMinutes: existingGameStart, gameDurationMinutes: existingGameDuration } = calculateCenteredGameTime(existing)
-          const existingEnd = existingGameStart + existingGameDuration
-          const existingSlots = existing.assignedSlots || []
-          
-          if (existingSlots.length === 0) continue
-          
-          const timeOverlap = existingGameStart < endMinutes && existingEnd > gameStartMinutes
-          if (timeOverlap && candidateSlots.some(s => existingSlots.includes(s))) {
-            blockers.push(i)
-          }
-        }
-        
-        // Si des événements bloquent, essayer de les déplacer
-        if (blockers.length > 0) {
-          let canShift = true
-          const maxCandidate = Math.max(...candidateSlots)
-          
-          // Pour chaque bloqueur, calculer où le déplacer
-          for (const blockerIndex of blockers) {
-            const blocker = compactedAppointments[blockerIndex]
-            const blockerSlots = blocker.assignedSlots || []
-            const minBlocker = Math.min(...blockerSlots)
-            
-            if (minBlocker > maxCandidate) continue // Déjà après
-            
-            const shift = maxCandidate - minBlocker + 1
-            const newSlots = blockerSlots.map(s => s + shift).sort((a, b) => a - b)
-            const maxNew = Math.max(...newSlots)
-            
-            if (maxNew > TOTAL_SLOTS) {
-              canShift = false
-              break
-            }
-            
-            // Vérifier si les nouveaux slots sont libres (récursivement)
-            const blockerStart = blocker.hour * 60 + (blocker.minute || 0)
-            const blockerDuration = blocker.gameDurationMinutes || blocker.durationMinutes || 60
-            const blockerEnd = blockerStart + blockerDuration
-            
-            if (!areSlotsFree(newSlots, blockerStart, blockerEnd, blocker.id)) {
-              // Les nouveaux slots sont occupés, déplacer récursivement
-              if (!shiftAppointmentRight(blockerIndex, newSlots)) {
-                canShift = false
-                break
-              }
-            } else {
-              // Déplacer le bloqueur
-              release(blockerSlots, blockerStart, blockerEnd)
-              reserve(newSlots, blockerStart, blockerEnd)
-              compactedAppointments[blockerIndex] = { ...blocker, assignedSlots: newSlots }
-            }
-          }
-          
-          // Si tous les bloqueurs ont été déplacés, vérifier que les slots sont maintenant libres
-          if (canShift && areSlotsFree(candidateSlots, gameStartMinutes, endMinutes, appointment.id)) {
-            assignedSlots = candidateSlots
-            break
-          }
-        }
-      }
-      
-      // Si pas de slots consécutifs trouvés, prendre les premiers disponibles
-      if (!assignedSlots) {
-        const available: number[] = []
-        for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
-          if (available.length >= slotsNeeded) break
-          if (areSlotsFree([slot], gameStartMinutes, endMinutes, appointment.id)) {
-            available.push(slot)
-          }
-        }
-        if (available.length >= slotsNeeded) {
-          assignedSlots = available.slice(0, slotsNeeded)
-        } else if (available.length > 0) {
-          assignedSlots = available
-        } else {
-          // Aucun slot disponible, assigner les premiers (sera marqué comme insuffisant)
-          assignedSlots = Array.from({ length: Math.min(slotsNeeded, TOTAL_SLOTS) }, (_, i) => i + 1)
-        }
-      }
-      
-      // Vérifier une dernière fois qu'il n'y a pas de conflit physique
-      if (assignedSlots) {
-        let hasConflict = false
-        for (const existing of compactedAppointments) {
-          // Calculer le temps de jeu centré pour l'événement existant
-          const { gameStartMinutes: existingGameStart, gameDurationMinutes: existingGameDuration } = calculateCenteredGameTime(existing)
-          const existingEnd = existingGameStart + existingGameDuration
-          const existingSlots = existing.assignedSlots || []
-          
-          if (existingSlots.length === 0) continue
-          
-          const timeOverlap = existingGameStart < endMinutes && existingEnd > gameStartMinutes
-          if (timeOverlap && assignedSlots.some(s => existingSlots.includes(s))) {
-            hasConflict = true
-            break
-          }
-        }
-        
-        if (!hasConflict) {
-          const sorted = assignedSlots.sort((a, b) => a - b)
-          const consecutive = sorted.every((s, i) => i === 0 || s === sorted[i - 1] + 1)
-          const enough = sorted.length >= slotsNeeded
-          
-          reserve(sorted, gameStartMinutes, endMinutes)
-          compactedAppointments.push({
-            ...appointment,
-            assignedSlots: sorted,
-            hasInsufficientSlots: !consecutive || !enough
-          })
-        }
-      }
-    }
-
-    return compactedAppointments
+    // Convertir en SimpleAppointment
+    return reorganizedBookings.map(b => {
+      const original = dateAppointments.find(a => a.id === b.id)
+      return fromBooking(b, original)
+    })
   }
 
-  // Trouver les slots disponibles pour un créneau donné
+  // Trouver les slots disponibles pour un créneau donné (utilise compactSlots qui utilise le scheduler)
   const findAvailableSlots = (
     date: string,
     startMinutes: number,
@@ -1749,81 +1564,196 @@ export default function AdminPage() {
     }
     const dateStr = appointmentDate
 
-    // Calculer le nombre de slots nécessaires
-    const slotsNeeded = calculateSlotsNeeded(appointmentParticipants ?? null)
-    
-    // Calculer les minutes de début de l'événement
-    const eventStartMinutes = appointmentHour * 60 + appointmentMinute
-    
-    // IMPORTANT : Deux durées différentes
+    // Convertir les appointments existants en Bookings (exclure celui en cours d'édition)
+    const existingBookings = appointments
+      .filter(a => a.id !== editingAppointment?.id)
+      .map(toBooking)
+
+    // Préparer les paramètres pour le scheduler
     const eventDurationMinutes = (appointmentEventType && appointmentEventType !== 'game') 
-      ? (appointmentDuration ?? 120) // Durée de l'événement pour la salle (événements)
-      : (appointmentGameDuration ?? 60) // Pour les jeux, utiliser la durée du jeu
+      ? (appointmentDuration ?? 120)
+      : (appointmentGameDuration ?? 60)
     
-    // Pour les événements avec salle, le jeu dure toujours 1h et est centré
-    let gameStartMinutes: number
-    let gameDurationMinutes: number
-    if (appointmentEventType && appointmentEventType !== 'game' && eventDurationMinutes > 60) {
-      // Événement avec salle : jeu centré de 1h
-      gameDurationMinutes = 60
-      const gameStartOffset = (eventDurationMinutes - gameDurationMinutes) / 2
-      gameStartMinutes = eventStartMinutes + gameStartOffset
+    const params = {
+      date: dateStr,
+      hour: appointmentHour,
+      minute: appointmentMinute,
+      participants: appointmentParticipants ?? 0,
+      type: (appointmentEventType === 'game' ? 'game' : 'event') as 'game' | 'event',
+      durationMinutes: eventDurationMinutes,
+      gameDurationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+        ? 60 // Pour EVENT, jeu toujours 60 min centré
+        : (appointmentGameDuration ?? 60),
+      excludeBookingId: editingAppointment?.id
+    }
+
+    // Utiliser le scheduler pour placer le booking
+    const roomConfigs = toRoomConfigs(roomCapacities)
+    let result
+
+    if (params.type === 'event') {
+      result = placeEventBooking(existingBookings, params, roomConfigs, false)
     } else {
-      // Jeu simple : pas de centrage
-      gameStartMinutes = eventStartMinutes
-      gameDurationMinutes = appointmentGameDuration ?? 60
+      result = placeGameBooking(existingBookings, params, true, false) // allowSplit pour GAME, pas de surbook par défaut
     }
-    
-    // RÈGLE TETRIS : Laisser compactSlots essayer de déplacer les blocs automatiquement
-    // On essaie d'abord de sauvegarder avec des slots vides, compactSlots va essayer de trouver une place
-    // en déplaçant les autres blocs si nécessaire
-    
-    // Vérifier d'abord s'il y a des slots directement disponibles
-    const availableSlots = findAvailableSlots(
-      dateStr,
-      gameStartMinutes,
-      gameDurationMinutes,
-      slotsNeeded,
-      editingAppointment?.id
-    )
-    
-    // Si on a trouvé des slots directement disponibles, les utiliser
-    if (availableSlots && availableSlots.length >= slotsNeeded) {
-      saveAppointmentWithSlots(availableSlots)
-      return
-    }
-    
-    // Sinon, on laisse compactSlots essayer de déplacer les blocs
-    // Mais d'abord, on vérifie si c'est vraiment impossible (tous les slots occupés)
-    const overlapCheck = checkForOverlap(
-      dateStr,
-      gameStartMinutes,
-      gameDurationMinutes,
-      slotsNeeded,
-      editingAppointment?.id
-    )
-    
-    // Si aucun slot n'est disponible ET qu'on ne peut pas déplacer (tous les slots sont occupés jusqu'à la fin),
-    // demander autorisation immédiatement
-    // Sinon, laisser compactSlots essayer de déplacer les blocs
-    if (overlapCheck.availableSlots === 0) {
-      // Tous les slots sont occupés, on ne peut pas déplacer, demander autorisation
-      const maxParticipants = 0
-      setOverlapInfo({
-        slotsNeeded,
-        availableSlots: 0,
-        maxParticipants
+
+    // Gérer le résultat
+    if (result.success && result.allocation) {
+      // Placement réussi : créer/mettre à jour le booking
+      const newBooking: Booking = {
+        id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: params.type,
+        date: params.date,
+        hour: params.hour,
+        minute: params.minute,
+        participants: params.participants,
+        durationMinutes: params.durationMinutes,
+        gameDurationMinutes: params.gameDurationMinutes,
+        assignedSlots: result.allocation.slotAllocation?.slots,
+        assignedRoom: result.allocation.roomAllocation?.roomId,
+        customerFirstName: appointmentCustomerFirstName || undefined,
+        customerLastName: appointmentCustomerLastName || undefined,
+        color: appointmentColor || '#3b82f6'
+      }
+
+      // Convertir en SimpleAppointment et sauvegarder
+      const newAppointment = fromBooking(newBooking, editingAppointment || undefined)
+      
+      setAppointments(prev => {
+        let updated: SimpleAppointment[]
+        if (editingAppointment) {
+          updated = prev.map(a => a.id === editingAppointment.id ? newAppointment : a)
+        } else {
+          updated = [...prev, newAppointment]
+        }
+        
+        // Réorganiser tous les bookings de la date avec le scheduler
+        const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
+        const otherDates = updated.filter(a => a.date !== dateStr)
+        
+        // Guard : vérifier qu'il n'y a pas de chevauchement
+        const allBookings = reorganized.map(toBooking)
+        assertNoOverlap(allBookings, dateStr, 'saveAppointment')
+        
+        return [...otherDates, ...reorganized]
       })
-      setPendingSave(() => () => {
-        saveAppointmentWithSlots([])
-      })
-      setShowOverlapConfirm(true)
-      return
+
+      // Fermer le modal
+      setShowAppointmentModal(false)
+      setEditingAppointment(null)
+      // Reset form...
+      setAppointmentCustomerFirstName('')
+      setAppointmentCustomerLastName('')
+      setAppointmentHour(null)
+      setAppointmentDate('')
+      setAppointmentParticipants(null)
+      setAppointmentEventType('')
+      setAppointmentGameDuration(60)
+      setAppointmentDuration(60)
+      setAppointmentColor('#3b82f6')
+    } else if (result.conflict) {
+      // Gérer les conflits
+      if (result.conflict.type === 'NEED_SURBOOK_CONFIRM' || result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
+        // Afficher popup de confirmation
+        if (result.conflict.type === 'NEED_SURBOOK_CONFIRM') {
+          setOverlapInfo({
+            slotsNeeded: result.conflict.details?.neededSlots || 0,
+            availableSlots: result.conflict.details?.availableSlots || 0,
+            maxParticipants: (result.conflict.details?.availableSlots || 0) * 6
+          })
+          setPendingSave(() => () => {
+            // Réessayer avec surbook autorisé
+            const surbookResult = placeGameBooking(existingBookings, params, true, true)
+            if (surbookResult.success && surbookResult.allocation) {
+              // Créer booking avec surbook
+              const surbookBooking: Booking = {
+                id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: params.type,
+                date: params.date,
+                hour: params.hour,
+                minute: params.minute,
+                participants: params.participants,
+                durationMinutes: params.durationMinutes,
+                gameDurationMinutes: params.gameDurationMinutes,
+                assignedSlots: surbookResult.allocation.slotAllocation?.slots,
+                surbooked: true,
+                surbookedParticipants: result.conflict.details?.excessParticipants,
+                customerFirstName: appointmentCustomerFirstName || undefined,
+                customerLastName: appointmentCustomerLastName || undefined,
+                color: appointmentColor || '#3b82f6'
+              }
+              const surbookAppointment = fromBooking(surbookBooking, editingAppointment || undefined)
+              setAppointments(prev => {
+                let updated: SimpleAppointment[]
+                if (editingAppointment) {
+                  updated = prev.map(a => a.id === editingAppointment.id ? surbookAppointment : a)
+                } else {
+                  updated = [...prev, surbookAppointment]
+                }
+                const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
+                const otherDates = updated.filter(a => a.date !== dateStr)
+                const allBookings = reorganized.map(toBooking)
+                assertNoOverlap(allBookings, dateStr, 'saveAppointment-surbook')
+                return [...otherDates, ...reorganized]
+              })
+              setShowAppointmentModal(false)
+              setEditingAppointment(null)
+            }
+          })
+          setShowOverlapConfirm(true)
+        } else if (result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
+          setRoomCapacityInfo({
+            roomNumber: result.conflict.details?.roomId || 0,
+            roomName: `Salle ${result.conflict.details?.roomId || 0}`,
+            maxCapacity: result.conflict.details?.roomCapacity || 0,
+            participants: params.participants
+          })
+          setPendingRoomSave(() => () => {
+            // Réessayer avec room overcap autorisé
+            const overcapResult = placeEventBooking(existingBookings, params, roomConfigs, true)
+            if (overcapResult.success && overcapResult.allocation) {
+              const overcapBooking: Booking = {
+                id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: params.type,
+                date: params.date,
+                hour: params.hour,
+                minute: params.minute,
+                participants: params.participants,
+                durationMinutes: params.durationMinutes,
+                gameDurationMinutes: params.gameDurationMinutes,
+                assignedSlots: overcapResult.allocation.slotAllocation?.slots,
+                assignedRoom: overcapResult.allocation.roomAllocation?.roomId,
+                roomOvercap: true,
+                roomOvercapParticipants: result.conflict.details?.excessParticipants,
+                customerFirstName: appointmentCustomerFirstName || undefined,
+                customerLastName: appointmentCustomerLastName || undefined,
+                color: appointmentColor || '#3b82f6'
+              }
+              const overcapAppointment = fromBooking(overcapBooking, editingAppointment || undefined)
+              setAppointments(prev => {
+                let updated: SimpleAppointment[]
+                if (editingAppointment) {
+                  updated = prev.map(a => a.id === editingAppointment.id ? overcapAppointment : a)
+                } else {
+                  updated = [...prev, overcapAppointment]
+                }
+                const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
+                const otherDates = updated.filter(a => a.date !== dateStr)
+                const allBookings = reorganized.map(toBooking)
+                assertNoOverlap(allBookings, dateStr, 'saveAppointment-overcap')
+                return [...otherDates, ...reorganized]
+              })
+              setShowAppointmentModal(false)
+              setEditingAppointment(null)
+            }
+          })
+          setShowRoomCapacityConfirm(true)
+        }
+      } else {
+        // Autres conflits : refuser
+        alert(result.conflict.message)
+      }
     }
-    
-    // Sinon, laisser compactSlots essayer de déplacer les blocs
-    // Il va essayer de trouver une place en déplaçant les autres blocs
-    saveAppointmentWithSlots([])
   }
 
   // Afficher la pop-up de confirmation de suppression
