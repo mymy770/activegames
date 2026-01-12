@@ -801,10 +801,8 @@ export default function AdminPage() {
     } else if (appointmentEventType === 'game' || appointmentEventType === '') {
       // Jeu normal → bleu
       setAppointmentColor('#3b82f6')
-      // Durée par défaut : 1h pour jeu (seulement si nouvelle création)
-      if (!editingAppointment) {
-        setAppointmentDuration(60)
-      }
+      // Pour les jeux, pas besoin de durationMinutes (seulement gameDurationMinutes)
+      // On ne modifie pas appointmentDuration ici car il n'est pas utilisé pour les jeux
     }
   }, [appointmentEventType, showAppointmentModal, editingAppointment, userChangedColor])
 
@@ -822,10 +820,13 @@ export default function AdminPage() {
     const startMinutes = appointmentHour * 60 + appointmentMinute
     
     // IMPORTANT : Deux durées différentes
-    // - gameDurationMinutes : durée du jeu (bloque les slots)
-    // - durationMinutes : durée de l'événement (bloque la salle d'anniversaire)
+    // - gameDurationMinutes : durée du jeu (bloque les slots) - TOUJOURS présente
+    // - durationMinutes : durée de l'événement (bloque la salle d'anniversaire) - UNIQUEMENT pour les événements
     const gameDurationMinutes = appointmentGameDuration ?? 60 // Durée du jeu pour les slots
-    const eventDurationMinutes = appointmentDuration ?? 60 // Durée de l'événement pour la salle
+    // Pour les jeux standards (type "game"), pas de durée d'événement, utiliser la durée du jeu
+    const eventDurationMinutes = (appointmentEventType && appointmentEventType !== 'game') 
+      ? (appointmentDuration ?? 120) // Durée de l'événement pour la salle (événements)
+      : gameDurationMinutes // Pour les jeux, utiliser la durée du jeu
 
     // Vérifier si on modifie un rendez-vous existant et si l'heure/durée/participants ont changé
     const isModifying = editingAppointment !== null
@@ -921,7 +922,10 @@ export default function AdminPage() {
                 date: dateStr,
                 branch: appointmentBranch || undefined,
                 eventType: appointmentEventType || undefined,
-                durationMinutes: appointmentDuration ?? undefined,
+                // Pour les jeux standards, pas de durationMinutes (seulement gameDurationMinutes)
+                durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+                  ? (appointmentDuration ?? undefined) 
+                  : undefined,
                 color: appointmentColor || '#3b82f6',
                 eventNotes: appointmentEventNotes || undefined,
                 customerFirstName: appointmentCustomerFirstName || undefined,
@@ -946,7 +950,10 @@ export default function AdminPage() {
         date: dateStr,
         branch: appointmentBranch || undefined,
         eventType: appointmentEventType || undefined,
-        durationMinutes: appointmentDuration ?? undefined,
+        // Pour les jeux standards, pas de durationMinutes (seulement gameDurationMinutes)
+        durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+          ? (appointmentDuration ?? undefined) 
+          : undefined,
         color: appointmentColor || '#3b82f6',
         eventNotes: appointmentEventNotes || undefined,
         customerFirstName: appointmentCustomerFirstName || undefined,
@@ -1899,8 +1906,11 @@ export default function AdminPage() {
                       {/* Afficher les événements dans les colonnes de salles d'anniversaire */}
                       {appointmentsWithRooms.map((appointment) => {
                         const appointmentStartMinutes = appointment.hour * 60 + (appointment.minute || 0)
-                        // Pour les salles, utiliser la durée de l'événement (durationMinutes), pas gameDurationMinutes
-                        const eventDuration = appointment.durationMinutes || 60
+                        // Pour les salles, utiliser la durée de l'événement (durationMinutes)
+                        // Si c'est un jeu standard, utiliser gameDurationMinutes à la place
+                        const eventDuration = (appointment.eventType && appointment.eventType !== 'game')
+                          ? (appointment.durationMinutes || 120)
+                          : (appointment.gameDurationMinutes || 60)
                         const appointmentEndMinutes = appointmentStartMinutes + eventDuration
                         const assignedRoom = appointment.assignedRoom!
                         
@@ -2076,52 +2086,48 @@ export default function AdminPage() {
                             />
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className={`block text-sm mb-1 ${textSecondary}`}>Heure</label>
+                            <select
+                              value={appointmentHour !== null && appointmentMinute !== null ? `${appointmentHour * 100 + appointmentMinute}` : ''}
+                              onChange={(e) => {
+                                const slotId = Number(e.target.value)
+                                if (slotId) {
+                                  setAppointmentHour(Math.floor(slotId / 100))
+                                  setAppointmentMinute(slotId % 100)
+                                } else {
+                                  setAppointmentHour(null)
+                                  setAppointmentMinute(0)
+                                }
+                              }}
+                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                            >
+                              <option value="">Sélectionner une heure</option>
+                              {timeSlots.map((slot) => (
+                                <option key={slot.slotId} value={slot.slotId}>
+                                  {slot.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Durée événement - UNIQUEMENT pour les événements (pas pour les jeux standards) */}
+                          {appointmentEventType && appointmentEventType !== 'game' && (
                             <div>
-                              <label className={`block text-sm mb-1 ${textSecondary}`}>Heure</label>
-                              <select
-                                value={appointmentHour !== null && appointmentMinute !== null ? `${appointmentHour * 100 + appointmentMinute}` : ''}
-                                onChange={(e) => {
-                                  const slotId = Number(e.target.value)
-                                  if (slotId) {
-                                    setAppointmentHour(Math.floor(slotId / 100))
-                                    setAppointmentMinute(slotId % 100)
-                                  } else {
-                                    setAppointmentHour(null)
-                                    setAppointmentMinute(0)
-                                  }
-                                }}
-                                className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
-                              >
-                                <option value="">Sélectionner une heure</option>
-                                {timeSlots.map((slot) => (
-                                  <option key={slot.slotId} value={slot.slotId}>
-                                    {slot.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className={`block text-sm mb-1 ${textSecondary}`}>
-                                {appointmentEventType && appointmentEventType !== 'game' 
-                                  ? 'Durée événement (min)' 
-                                  : 'Durée (min)'}
-                              </label>
+                              <label className={`block text-sm mb-1 ${textSecondary}`}>Durée événement (min)</label>
                               <input
                                 type="number"
                                 min={15}
                                 step={15}
-                                value={appointmentDuration ?? (appointmentEventType && appointmentEventType !== 'game' ? 120 : 60)}
+                                value={appointmentDuration ?? 120}
                                 onChange={(e) =>
-                                  setAppointmentDuration(e.target.value ? Number(e.target.value) : (appointmentEventType && appointmentEventType !== 'game' ? 120 : 60))
+                                  setAppointmentDuration(e.target.value ? Number(e.target.value) : 120)
                                 }
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
-                                title={appointmentEventType && appointmentEventType !== 'game' 
-                                  ? 'Durée totale de l\'événement (bloque la salle d\'anniversaire)' 
-                                  : 'Durée de l\'événement'}
+                                title="Durée totale de l'événement (bloque la salle d'anniversaire)"
                               />
                             </div>
-                          </div>
+                          )}
 
                           <div>
                             <label className={`block text-sm mb-1 ${textSecondary}`}>Titre / Nom de l'événement</label>
