@@ -99,6 +99,7 @@ export default function AdminPage() {
   const [appointmentGameDuration, setAppointmentGameDuration] = useState<number | null>(60)
   const [appointmentParticipants, setAppointmentParticipants] = useState<number | null>(null)
   const [appointmentRoom, setAppointmentRoom] = useState<number | null>(null) // 1-4 pour les salles d'anniversaire
+  const [userChangedColor, setUserChangedColor] = useState(false) // Suivre si l'utilisateur a modifié la couleur manuellement
 
   const presetColors = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#a855f7', '#eab308']
 
@@ -533,6 +534,7 @@ export default function AdminPage() {
   }
 
   // Calculer le nombre de slots nécessaires selon le nombre de participants
+  // Si participants est null ou non défini, considérer comme < 6 joueurs (1 slot)
   const calculateSlotsNeeded = (participants: number | null | undefined): number => {
     if (!participants || participants <= 0) return 1
     return Math.ceil(participants / 6)
@@ -720,17 +722,19 @@ export default function AdminPage() {
     setAppointmentDate(`${year}-${month}-${day}`)
     setAppointmentBranch('')
     setAppointmentEventType('')
-    setAppointmentDuration(60)
-    setAppointmentColor('#3b82f6')
+    // Durées par défaut : 2h pour événement, 1h pour jeu
+    setAppointmentDuration(120) // 2 heures par défaut pour événement
+    setAppointmentColor('#3b82f6') // Bleu par défaut (sera changé automatiquement si événement)
     setAppointmentEventNotes('')
     setAppointmentCustomerFirstName('')
     setAppointmentCustomerLastName('')
     setAppointmentCustomerPhone('')
     setAppointmentCustomerEmail('')
     setAppointmentCustomerNotes('')
-    setAppointmentGameDuration(60)
-    setAppointmentParticipants(null)
+    setAppointmentGameDuration(60) // 1 heure par défaut pour jeu
+    setAppointmentParticipants(null) // null = < 6 joueurs = 1 slot
     setAppointmentRoom(null)
+    setUserChangedColor(false) // Réinitialiser le flag de couleur modifiée
     setShowAppointmentModal(true)
   }
 
@@ -771,10 +775,38 @@ export default function AdminPage() {
       const durationMinutes = a.durationMinutes || 60
       
       // Pour la migration, assigner les premiers slots disponibles
-      const defaultSlots = Array.from({ length: slotsNeeded }, (_, i) => Math.min(i + 1, 14))
+      const defaultSlots = Array.from({ length: slotsNeeded }, (_, i) => Math.min(i + 1, TOTAL_SLOTS))
       return { ...a, assignedSlots: defaultSlots }
     }))
   }, [appointments.length])
+
+  // Changer automatiquement la couleur selon le type d'événement
+  // Ne s'applique que lors du changement de type, pas si l'utilisateur a déjà modifié la couleur
+  useEffect(() => {
+    if (!showAppointmentModal) {
+      setUserChangedColor(false)
+      return
+    }
+    
+    // Si l'utilisateur a modifié la couleur manuellement, ne pas la changer automatiquement
+    if (userChangedColor && editingAppointment) return
+    
+    if (appointmentEventType && appointmentEventType !== 'game') {
+      // Événement (anniversaire, bar mitzvah, etc.) → vert
+      setAppointmentColor('#22c55e')
+      // Durée par défaut : 2h pour événement (seulement si nouvelle création)
+      if (!editingAppointment) {
+        setAppointmentDuration(120)
+      }
+    } else if (appointmentEventType === 'game' || appointmentEventType === '') {
+      // Jeu normal → bleu
+      setAppointmentColor('#3b82f6')
+      // Durée par défaut : 1h pour jeu (seulement si nouvelle création)
+      if (!editingAppointment) {
+        setAppointmentDuration(60)
+      }
+    }
+  }, [appointmentEventType, showAppointmentModal, editingAppointment, userChangedColor])
 
   const saveAppointment = () => {
     if (!appointmentTitle.trim() || appointmentHour === null || !appointmentDate) {
@@ -783,7 +815,8 @@ export default function AdminPage() {
     const dateStr = appointmentDate
 
     // Calculer le nombre de slots nécessaires
-    const slotsNeeded = calculateSlotsNeeded(appointmentParticipants)
+    // Si participants est null, considérer comme < 6 joueurs (1 slot)
+    const slotsNeeded = calculateSlotsNeeded(appointmentParticipants ?? null)
     
     // Calculer les minutes de début
     const startMinutes = appointmentHour * 60 + appointmentMinute
@@ -2078,9 +2111,9 @@ export default function AdminPage() {
                                 type="number"
                                 min={15}
                                 step={15}
-                                value={appointmentDuration ?? ''}
+                                value={appointmentDuration ?? (appointmentEventType && appointmentEventType !== 'game' ? 120 : 60)}
                                 onChange={(e) =>
-                                  setAppointmentDuration(e.target.value ? Number(e.target.value) : null)
+                                  setAppointmentDuration(e.target.value ? Number(e.target.value) : (appointmentEventType && appointmentEventType !== 'game' ? 120 : 60))
                                 }
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                                 title={appointmentEventType && appointmentEventType !== 'game' 
@@ -2089,24 +2122,6 @@ export default function AdminPage() {
                               />
                             </div>
                           </div>
-                          
-                          {/* Durée du jeu (pour les slots) - seulement si ce n'est pas un "game" */}
-                          {appointmentEventType && appointmentEventType !== 'game' && (
-                            <div>
-                              <label className={`block text-sm mb-1 ${textSecondary}`}>Durée du jeu (min)</label>
-                              <input
-                                type="number"
-                                min={15}
-                                step={15}
-                                value={appointmentGameDuration ?? ''}
-                                onChange={(e) =>
-                                  setAppointmentGameDuration(e.target.value ? Number(e.target.value) : null)
-                                }
-                                className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
-                                title="Durée du jeu (bloque les slots)"
-                              />
-                            </div>
-                          )}
 
                           <div>
                             <label className={`block text-sm mb-1 ${textSecondary}`}>Titre / Nom de l'événement</label>
@@ -2126,7 +2141,10 @@ export default function AdminPage() {
                                 <button
                                   key={color}
                                   type="button"
-                                  onClick={() => setAppointmentColor(color)}
+                                  onClick={() => {
+                                    setAppointmentColor(color)
+                                    setUserChangedColor(true) // L'utilisateur a modifié la couleur manuellement
+                                  }}
                                   className={`w-8 h-8 rounded-full border-2 transition-all ${
                                     appointmentColor === color ? 'border-white ring-2 ring-offset-2 ring-primary' : 'border-gray-300'
                                   }`}
@@ -2201,11 +2219,12 @@ export default function AdminPage() {
                                 type="number"
                                 min={15}
                                 step={15}
-                                value={appointmentGameDuration ?? ''}
+                                value={appointmentGameDuration ?? 60}
                                 onChange={(e) =>
-                                  setAppointmentGameDuration(e.target.value ? Number(e.target.value) : null)
+                                  setAppointmentGameDuration(e.target.value ? Number(e.target.value) : 60)
                                 }
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                                title="Durée du jeu (bloque les slots)"
                               />
                             </div>
                             <div>
