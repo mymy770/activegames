@@ -33,6 +33,13 @@ type SimpleAppointment = {
 }
 
 export default function AdminPage() {
+  // ===== CONFIGURATION FLEXIBLE =====
+  // Modifiez ces valeurs pour ajouter/supprimer des slots ou des rooms
+  const TOTAL_SLOTS = 14
+  const TOTAL_ROOMS = 4
+  const TOTAL_COLUMNS = TOTAL_SLOTS + TOTAL_ROOMS
+  // ===================================
+  
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [theme, setTheme] = useState<Theme>('light')
@@ -541,10 +548,10 @@ export default function AdminPage() {
   ): number[] | null => {
     const endMinutes = startMinutes + durationMinutes
     
-    // Créer un tableau de disponibilité pour chaque slot (1-14) sur chaque intervalle de 15 minutes
+    // Créer un tableau de disponibilité pour chaque slot sur chaque intervalle de 15 minutes
     // Structure : slotAvailability[slotNumber][minute] = true/false
     const slotAvailability: boolean[][] = []
-    for (let slot = 1; slot <= 14; slot++) {
+    for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
       slotAvailability[slot] = []
       // Initialiser tous les créneaux de 15 min comme disponibles (10h à 22h)
       for (let min = 10 * 60; min < 23 * 60; min += 15) {
@@ -573,8 +580,8 @@ export default function AdminPage() {
       
       // Pour chaque slot assigné, marquer comme occupé sur toute la durée du chevauchement
       assignedSlots.forEach(slotIndex => {
-        // S'assurer que le slot est valide (1-14)
-        if (slotIndex < 1 || slotIndex > 14) return
+        // S'assurer que le slot est valide
+        if (slotIndex < 1 || slotIndex > TOTAL_SLOTS) return
         
         // Marquer comme occupé seulement sur la partie qui chevauche
         const overlapStart = Math.max(appStartMinutes, startMinutes)
@@ -595,7 +602,7 @@ export default function AdminPage() {
     // sur TOUTE la durée (de startMinutes à endMinutes)
     
     // Parcourir tous les groupes possibles de slots consécutifs
-    for (let startSlot = 1; startSlot <= 14 - slotsNeeded + 1; startSlot++) {
+    for (let startSlot = 1; startSlot <= TOTAL_SLOTS - slotsNeeded + 1; startSlot++) {
       const candidateSlots: number[] = []
       
       // Vérifier si ce groupe de slots consécutifs est disponible
@@ -638,8 +645,8 @@ export default function AdminPage() {
   ): number | null => {
     const endMinutes = startMinutes + durationMinutes
     
-    // Vérifier chaque salle (1-4)
-    for (let room = 1; room <= 4; room++) {
+    // Vérifier chaque salle
+    for (let room = 1; room <= TOTAL_ROOMS; room++) {
       let isAvailable = true
       
       // Vérifier si cette salle est occupée par un autre rendez-vous sur ce créneau
@@ -809,7 +816,7 @@ export default function AdminPage() {
     if (!availableSlots) {
       // Compter combien de slots sont disponibles sur ce créneau
       let availableCount = 0
-      for (let slot = 1; slot <= 14; slot++) {
+      for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
         let isAvailable = true
         for (let min = startMinutes; min < startMinutes + gameDurationMinutes; min += 15) {
           // Vérifier si ce slot est occupé à ce moment
@@ -1633,7 +1640,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Vue journalière : Lignes = horaires (15 min), Colonnes = 14 slots */}
+            {/* Vue journalière : Lignes = horaires (15 min), Colonnes = 14 slots + 4 salles */}
             <div className="flex overflow-x-auto">
               {/* Colonne Heure - Labels 30 minutes, grille interne 15 minutes */}
               <div className={`w-24 ${bgHeader} border-r ${borderColor} sticky left-0 flex-shrink-0 z-10`}>
@@ -1669,131 +1676,126 @@ export default function AdminPage() {
                 })}
               </div>
 
-              {/* Zone avec 14 colonnes slots + 4 colonnes salles d'anniversaire */}
-              {/* Utiliser grid pour un contrôle précis et égal des colonnes */}
+              {/* Zone avec slots + salles d'anniversaire (colonnes dynamiques) */}
               <div className="flex-1 relative" style={{ height: `${rowHeight + 48 * (rowHeight / 2)}px` }}>
-                {/* Constantes pour le nombre de colonnes - facilement modifiables */}
-                {(() => {
-                  const TOTAL_SLOTS = 14
-                  const TOTAL_ROOMS = 4
-                  const TOTAL_COLUMNS = TOTAL_SLOTS + TOTAL_ROOMS
-                  
-                  return (
-                    <>
-                      {/* En-tête avec toutes les colonnes */}
-                      <div 
-                        className="grid sticky top-0 z-10"
-                        style={{ 
-                          gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
-                          height: `${rowHeight}px`,
-                          minHeight: `${rowHeight}px`
-                        }}
-                      >
-                        {/* 14 colonnes slots */}
-                        {Array.from({ length: TOTAL_SLOTS }, (_, slotIndex) => {
-                          const slotNumber = slotIndex + 1
-                          return (
-                            <div
-                              key={`header-slot-${slotNumber}`}
-                              className={`${bgHeader} border-r ${borderColor} border-b ${borderColor} text-center flex items-center justify-center`}
-                            >
-                              <div className={`text-xs font-bold ${textPrimary}`}>
-                                Slot {slotNumber}
-                              </div>
-                            </div>
-                          )
-                        })}
-                        
-                        {/* 4 colonnes salles d'anniversaire */}
-                        {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
-                          const roomNumber = roomIndex + 1
-                          return (
-                            <div
-                              key={`header-room-${roomNumber}`}
-                              className={`${bgHeader} border-r ${borderColor} border-b ${borderColor} text-center flex items-center justify-center`}
-                            >
-                              <div className={`text-xs font-bold ${textPrimary}`}>
-                                Room {roomNumber}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                {/* Grille de base : 48 lignes de 15 min × 18 colonnes (14 slots + 4 salles) */}
-                {(() => {
-                  const TOTAL_SLOTS = 14
-                  const TOTAL_ROOMS = 4
-                  const TOTAL_COLUMNS = TOTAL_SLOTS + TOTAL_ROOMS
-                  
-                  return Array.from({ length: 48 }, (_, timeIndex) => {
-                    const hour = 10 + Math.floor(timeIndex / 4)
-                    const minute = (timeIndex % 4) * 15
-                    if (hour > 22) return null
-                    
-                    const year = selectedDate.getFullYear()
-                    const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
-                    const day = String(selectedDate.getDate()).padStart(2, '0')
-                    const dateStr = `${year}-${month}-${day}`
-                    
-                    const timeStartMinutes = hour * 60 + minute
-                    
-                    // Trouver les rendez-vous qui COMMENCENT à cette heure (sans doublons)
-                    const appointmentsStartingHere = appointments.filter((a, index, self) => {
-                      if (a.date !== dateStr) return false
-                      const assignedSlots = a.assignedSlots || []
-                      if (assignedSlots.length === 0) return false
-                      
-                      const aStart = a.hour * 60 + (a.minute || 0)
-                      if (aStart !== timeStartMinutes) return false
-                      
-                      // Éviter les doublons : vérifier que c'est le premier avec cet ID
-                      return self.findIndex(app => app.id === a.id) === index
-                    })
-                    
+                {/* En-tête des colonnes */}
+                <div
+                  className="grid sticky top-0 z-10"
+                  style={{
+                    gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
+                    height: `${rowHeight}px`,
+                    minHeight: `${rowHeight}px`,
+                  }}
+                >
+                  {/* Colonnes slots */}
+                  {Array.from({ length: TOTAL_SLOTS }, (_, slotIndex) => {
+                    const slotNumber = slotIndex + 1
                     return (
                       <div
-                        key={`time-row-${hour}-${minute}`}
-                        className="grid absolute w-full"
-                        style={{
-                          gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
-                          top: `${rowHeight + timeIndex * (rowHeight / 2)}px`,
-                          height: `${rowHeight / 2}px`,
-                        }}
+                        key={`header-slot-${slotNumber}`}
+                        className={`${bgHeader} border-r ${borderColor} border-b ${borderColor} text-center flex items-center justify-center`}
                       >
-                        {/* 14 colonnes slots */}
-                        {Array.from({ length: TOTAL_SLOTS }, (_, slotIndex) => {
-                          const slotNumber = slotIndex + 1
-                          
-                          return (
-                            <div
-                              key={`cell-${hour}-${minute}-slot-${slotNumber}`}
-                              className={`border-r ${borderColor} border-b ${borderColor} cursor-pointer hover:${bgCardHover} transition-colors relative`}
-                              onClick={(e) => {
-                                if ((e.target as HTMLElement).closest('[data-appointment-card]')) return
-                                openNewAppointmentModal(hour, minute)
-                              }}
-                            />
-                          )
-                        })}
-                        
-                        {/* 4 colonnes salles d'anniversaire */}
-                        {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
-                          const roomNumber = roomIndex + 1
-                          
-                          return (
-                            <div
-                              key={`cell-${hour}-${minute}-room-${roomNumber}`}
-                              className={`border-r ${borderColor} border-b ${borderColor} cursor-pointer hover:${bgCardHover} transition-colors relative`}
-                              onClick={(e) => {
-                                if ((e.target as HTMLElement).closest('[data-appointment-card]')) return
-                                openNewAppointmentModal(hour, minute)
-                              }}
-                            />
-                          )
-                        })}
-                      
-                      {/* Afficher les rendez-vous au niveau de la ligne complète */}
+                        <div className={`text-xs font-bold ${textPrimary}`}>Slot {slotNumber}</div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Colonnes salles d'anniversaire */}
+                  {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
+                    const roomNumber = roomIndex + 1
+                    return (
+                      <div
+                        key={`header-room-${roomNumber}`}
+                        className={`${bgHeader} border-r ${borderColor} border-b ${borderColor} text-center flex items-center justify-center`}
+                      >
+                        <div className={`text-xs font-bold ${textPrimary}`}>Room {roomNumber}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Grille de base : 48 lignes de 15 min × colonnes dynamiques */}
+                {Array.from({ length: 48 }, (_, timeIndex) => {
+                  const hour = 10 + Math.floor(timeIndex / 4)
+                  const minute = (timeIndex % 4) * 15
+                  if (hour > 22) return null
+                  
+                  const year = selectedDate.getFullYear()
+                  const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
+                  const day = String(selectedDate.getDate()).padStart(2, '0')
+                  const dateStr = `${year}-${month}-${day}`
+
+                  const timeStartMinutes = hour * 60 + minute
+
+                  // Trouver les rendez-vous qui COMMENCENT à cette heure (sans doublons)
+                  const appointmentsStartingHere = appointments.filter((a, index, self) => {
+                    if (a.date !== dateStr) return false
+                    const assignedSlots = a.assignedSlots || []
+                    if (assignedSlots.length === 0) return false
+
+                    const aStart = a.hour * 60 + (a.minute || 0)
+                    if (aStart !== timeStartMinutes) return false
+
+                    // Éviter les doublons : vérifier que c'est le premier avec cet ID
+                    return self.findIndex(app => app.id === a.id) === index
+                  })
+
+                  // Rendez-vous qui utilisent une salle à cette heure
+                  const appointmentsWithRooms = appointments.filter((a, index, self) => {
+                    if (a.date !== dateStr) return false
+                    if (!a.assignedRoom) return false
+                    if (a.eventType === 'game') return false // Les "game" ne bloquent pas les salles
+
+                    const aStart = a.hour * 60 + (a.minute || 0)
+                    if (aStart !== timeStartMinutes) return false
+
+                    // Éviter les doublons
+                    return self.findIndex(app => app.id === a.id) === index
+                  })
+
+                  return (
+                    <div
+                      key={`time-row-${hour}-${minute}`}
+                      className="grid absolute w-full"
+                      style={{
+                        gridTemplateColumns: `repeat(${TOTAL_COLUMNS}, 1fr)`,
+                        top: `${rowHeight + timeIndex * (rowHeight / 2)}px`,
+                        height: `${rowHeight / 2}px`,
+                      }}
+                    >
+                      {/* Colonnes slots */}
+                      {Array.from({ length: TOTAL_SLOTS }, (_, slotIndex) => {
+                        const slotNumber = slotIndex + 1
+
+                        return (
+                          <div
+                            key={`cell-${hour}-${minute}-slot-${slotNumber}`}
+                            className={`border-r ${borderColor} border-b ${borderColor} cursor-pointer hover:${bgCardHover} transition-colors relative`}
+                            onClick={(e) => {
+                              if ((e.target as HTMLElement).closest('[data-appointment-card]')) return
+                              openNewAppointmentModal(hour, minute)
+                            }}
+                          />
+                        )
+                      })}
+
+                      {/* Colonnes salles d'anniversaire */}
+                      {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
+                        const roomNumber = roomIndex + 1
+
+                        return (
+                          <div
+                            key={`cell-${hour}-${minute}-room-${roomNumber}`}
+                            className={`border-r ${borderColor} border-b ${borderColor} cursor-pointer hover:${bgCardHover} transition-colors relative`}
+                            onClick={(e) => {
+                              if ((e.target as HTMLElement).closest('[data-appointment-card]')) return
+                              openNewAppointmentModal(hour, minute)
+                            }}
+                          />
+                        )
+                      })}
+
+                      {/* Afficher les rendez-vous dans les slots */}
                       {appointmentsStartingHere.map((appointment) => {
                         const appointmentStartMinutes = appointment.hour * 60 + (appointment.minute || 0)
                         // Pour les slots, utiliser la durée du jeu (gameDurationMinutes), pas la durée de l'événement
@@ -1830,10 +1832,6 @@ export default function AdminPage() {
                         }
                         
                         // Calculer la position et largeur : le bloc commence au premier slot et s'étend sur tous les slots assignés
-                        // Utiliser les constantes définies dans le scope parent
-                        const TOTAL_SLOTS = 14
-                        const TOTAL_ROOMS = 4
-                        const TOTAL_COLUMNS = TOTAL_SLOTS + TOTAL_ROOMS
                         const startCol = minSlot - 1 // 0-indexed (slot 1 = colonne 0)
                         
                         return (
@@ -1866,93 +1864,69 @@ export default function AdminPage() {
                       })}
                       
                       {/* Afficher les événements dans les colonnes de salles d'anniversaire */}
-                      {(() => {
-                        // Trouver les rendez-vous qui COMMENCENT à cette heure et qui ont une salle assignée
-                        const appointmentsWithRooms = appointments.filter((a, index, self) => {
-                          if (a.date !== dateStr) return false
-                          if (!a.assignedRoom) return false
-                          if (a.eventType === 'game') return false // Les "game" ne bloquent pas les salles
-                          
-                          const aStart = a.hour * 60 + (a.minute || 0)
-                          if (aStart !== timeStartMinutes) return false
-                          
-                          // Éviter les doublons
-                          return self.findIndex(app => app.id === a.id) === index
-                        })
+                      {appointmentsWithRooms.map((appointment) => {
+                        const appointmentStartMinutes = appointment.hour * 60 + (appointment.minute || 0)
+                        // Pour les salles, utiliser la durée de l'événement (durationMinutes), pas gameDurationMinutes
+                        const eventDuration = appointment.durationMinutes || 60
+                        const appointmentEndMinutes = appointmentStartMinutes + eventDuration
+                        const assignedRoom = appointment.assignedRoom!
                         
-                        return appointmentsWithRooms.map((appointment) => {
-                          const appointmentStartMinutes = appointment.hour * 60 + (appointment.minute || 0)
-                          // Pour les salles, utiliser la durée de l'événement (durationMinutes), pas gameDurationMinutes
-                          const eventDuration = appointment.durationMinutes || 60
-                          const appointmentEndMinutes = appointmentStartMinutes + eventDuration
-                          const assignedRoom = appointment.assignedRoom!
-                          
-                          // Calculer combien de lignes de 15 min cet événement occupe dans la salle
-                          const durationIn15MinSlots = (appointmentEndMinutes - appointmentStartMinutes) / 15
-                          
-                          // Convertir couleur hex en couleur pleine
-                          const getFullColor = (color: string | undefined) => {
-                            if (!color) return '#93c5fd'
-                            return color
-                          }
-                          
-                          // Assombrir une couleur pour la bordure
-                          const getDarkerColor = (color: string | undefined) => {
-                            if (!color) return '#3b82f6'
-                            const hex = color.replace('#', '')
-                            const r = parseInt(hex.substring(0, 2), 16)
-                            const g = parseInt(hex.substring(2, 4), 16)
-                            const b = parseInt(hex.substring(4, 6), 16)
-                            const darkerR = Math.max(0, Math.floor(r * 0.7))
-                            const darkerG = Math.max(0, Math.floor(g * 0.7))
-                            const darkerB = Math.max(0, Math.floor(b * 0.7))
-                            return `rgb(${darkerR}, ${darkerG}, ${darkerB})`
-                          }
-                          
-                          // Position dans les colonnes de salles (après les 14 slots)
-                          const TOTAL_SLOTS = 14
-                          const TOTAL_ROOMS = 4
-                          const TOTAL_COLUMNS = TOTAL_SLOTS + TOTAL_ROOMS
-                          // Les salles commencent après les 14 slots, donc colonne 14, 15, 16, 17 (0-indexed)
-                          const roomCol = TOTAL_SLOTS + (assignedRoom - 1) // Colonne 14, 15, 16, 17 pour les salles 1, 2, 3, 4
-                          
-                          return (
-                            <div
-                              key={`room-${appointment.id}`}
-                              data-appointment-card
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openEditAppointmentModal(appointment)
-                              }}
-                              className="rounded text-xs font-medium hover:opacity-90 transition-all overflow-hidden flex flex-col justify-center px-2 absolute"
-                              style={{
-                                left: `${(roomCol / TOTAL_COLUMNS) * 100}%`,
-                                width: `${(1 / TOTAL_COLUMNS) * 100}%`,
-                                top: 0,
-                                height: `${durationIn15MinSlots * (rowHeight / 2)}px`,
-                                backgroundColor: getFullColor(appointment.color),
-                                border: `1px solid ${getDarkerColor(appointment.color)}`,
-                                color: '#fff',
-                                zIndex: 10,
-                                boxSizing: 'border-box',
-                              }}
-                              title={appointment.title}
-                            >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="truncate font-medium text-white">{appointment.title}</span>
-                              </div>
+                        // Calculer combien de lignes de 15 min cet événement occupe dans la salle
+                        const durationIn15MinSlots = (appointmentEndMinutes - appointmentStartMinutes) / 15
+                        
+                        // Convertir couleur hex en couleur pleine
+                        const getFullColor = (color: string | undefined) => {
+                          if (!color) return '#93c5fd'
+                          return color
+                        }
+                        
+                        // Assombrir une couleur pour la bordure
+                        const getDarkerColor = (color: string | undefined) => {
+                          if (!color) return '#3b82f6'
+                          const hex = color.replace('#', '')
+                          const r = parseInt(hex.substring(0, 2), 16)
+                          const g = parseInt(hex.substring(2, 4), 16)
+                          const b = parseInt(hex.substring(4, 6), 16)
+                          const darkerR = Math.max(0, Math.floor(r * 0.7))
+                          const darkerG = Math.max(0, Math.floor(g * 0.7))
+                          const darkerB = Math.max(0, Math.floor(b * 0.7))
+                          return `rgb(${darkerR}, ${darkerG}, ${darkerB})`
+                        }
+                        
+                        // Position dans les colonnes de salles (après les slots)
+                        const roomCol = TOTAL_SLOTS + (assignedRoom - 1) // Colonne après les slots
+                        
+                        return (
+                          <div
+                            key={`room-${appointment.id}`}
+                            data-appointment-card
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openEditAppointmentModal(appointment)
+                            }}
+                            className="rounded text-xs font-medium hover:opacity-90 transition-all overflow-hidden flex flex-col justify-center px-2 absolute"
+                            style={{
+                              left: `${(roomCol / TOTAL_COLUMNS) * 100}%`,
+                              width: `${(1 / TOTAL_COLUMNS) * 100}%`,
+                              top: 0,
+                              height: `${durationIn15MinSlots * (rowHeight / 2)}px`,
+                              backgroundColor: getFullColor(appointment.color),
+                              border: `1px solid ${getDarkerColor(appointment.color)}`,
+                              color: '#fff',
+                              zIndex: 10,
+                              boxSizing: 'border-box',
+                            }}
+                            title={appointment.title}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="truncate font-medium text-white">{appointment.title}</span>
                             </div>
-                          )
-                        })
-                      })()}
-                      </div>
-                    )
-                  })
-                })()}
+                          </div>
+                        )
+                      })}
                     </div>
-                  </>
-                )
-              })()}
+                  )
+                })}
               </div>
             </div>
 
@@ -2047,10 +2021,14 @@ export default function AdminPage() {
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                               >
                                 <option value="">Auto (trouver automatiquement)</option>
-                                <option value="1">Room 1</option>
-                                <option value="2">Room 2</option>
-                                <option value="3">Room 3</option>
-                                <option value="4">Room 4</option>
+                                {Array.from({ length: TOTAL_ROOMS }, (_, i) => {
+                                  const roomNumber = i + 1
+                                  return (
+                                    <option key={roomNumber} value={roomNumber}>
+                                      Room {roomNumber}
+                                    </option>
+                                  )
+                                })}
                               </select>
                             </div>
                           )}
