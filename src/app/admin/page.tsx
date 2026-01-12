@@ -591,9 +591,9 @@ export default function AdminPage() {
   // RÈGLE TETRIS : Aucun bloc ne peut entrer dans un autre bloc
   // Si conflit détecté, déplacer automatiquement les rendez-vous existants
   const compactSlots = (date: string, allAppointments: SimpleAppointment[], excludeAppointmentId?: string): SimpleAppointment[] => {
-    // Récupérer tous les rendez-vous pour cette date
+    // Récupérer tous les rendez-vous pour cette date (y compris ceux sans slots assignés)
     const dateAppointments = allAppointments
-      .filter(a => a.date === date && a.id !== excludeAppointmentId && (a.assignedSlots?.length || 0) > 0)
+      .filter(a => a.date === date && a.id !== excludeAppointmentId)
       .map(a => ({ ...a }))
 
     if (dateAppointments.length === 0) return []
@@ -1233,7 +1233,8 @@ export default function AdminPage() {
           customerNotes: appointmentCustomerNotes || undefined,
           gameDurationMinutes: appointmentGameDuration ?? undefined,
           participants: appointmentParticipants ?? undefined,
-          assignedSlots: slotsToUse,
+          // Si slotsToUse est vide, compactSlots assignera automatiquement les slots
+          assignedSlots: slotsToUse.length > 0 ? slotsToUse : undefined,
           assignedRoom: assignedRoom,
         }
         
@@ -1273,16 +1274,22 @@ export default function AdminPage() {
         customerNotes: appointmentCustomerNotes || undefined,
         gameDurationMinutes: appointmentGameDuration ?? undefined,
         participants: appointmentParticipants ?? undefined,
-        assignedSlots: slotsToUse,
+        // Si slotsToUse est vide, compactSlots assignera automatiquement les slots
+        assignedSlots: slotsToUse.length > 0 ? slotsToUse : undefined,
         assignedRoom: assignedRoom,
       }
       
       setAppointments(prev => {
-        // Ajouter le nouveau rendez-vous
-        const withNew = [...prev, newAppointment]
+        // Ajouter le nouveau rendez-vous SANS slots assignés d'abord
+        // compactSlots va les assigner automatiquement
+        const newAppointmentWithoutSlots = {
+          ...newAppointment,
+          assignedSlots: undefined
+        }
+        const withNew = [...prev, newAppointmentWithoutSlots]
         
         // Compacter les slots pour cette date
-        // compactSlots déplacera automatiquement les blocs en conflit
+        // compactSlots déplacera automatiquement les blocs en conflit et assignera les slots
         const compacted = compactSlots(dateStr, withNew)
         const otherDates = withNew.filter(a => a.date !== dateStr)
         
@@ -1383,42 +1390,9 @@ export default function AdminPage() {
       const capturedEditingId = editingAppointment?.id
       
       setPendingSave(() => () => {
-        // Utiliser les valeurs capturées
-        const slotsToUse: number[] = []
-        
-        // Prendre d'abord les slots vraiment disponibles
-        for (let slot = 1; slot <= TOTAL_SLOTS && slotsToUse.length < capturedAvailableCount; slot++) {
-          let isAvailable = true
-          for (let min = capturedStartMinutes; min < capturedStartMinutes + capturedGameDurationMinutes; min += 15) {
-            const isOccupied = appointments.some(a => {
-              if (a.id === capturedEditingId) return false
-              if (a.date !== capturedDateStr) return false
-              const assignedSlots = a.assignedSlots || []
-              if (!assignedSlots.includes(slot)) return false
-              const aStart = a.hour * 60 + (a.minute || 0)
-              const aGameDuration = a.gameDurationMinutes || 60
-              const aEnd = aStart + aGameDuration
-              return aStart < min + 15 && aEnd > min
-            })
-            if (isOccupied) {
-              isAvailable = false
-              break
-            }
-          }
-          if (isAvailable) {
-            slotsToUse.push(slot)
-          }
-        }
-        
-        // Compléter avec les slots manquants (compactSlots les déplacera si nécessaire)
-        for (let slot = 1; slot <= TOTAL_SLOTS && slotsToUse.length < capturedSlotsNeeded; slot++) {
-          if (!slotsToUse.includes(slot)) {
-            slotsToUse.push(slot)
-          }
-        }
-        
-        // Appeler saveAppointmentWithSlots avec les valeurs actuelles
-        saveAppointmentWithSlots(slotsToUse.slice(0, capturedSlotsNeeded))
+        // Ne pas assigner de slots maintenant - laisser compactSlots les assigner automatiquement
+        // Cela garantit que compactSlots peut déplacer les autres rendez-vous correctement
+        saveAppointmentWithSlots([])
       })
       
       setShowOverlapConfirm(true)
