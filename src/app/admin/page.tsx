@@ -1608,12 +1608,11 @@ export default function AdminPage() {
     }
     const dateStr = appointmentDate
 
-    // Convertir les appointments existants en Bookings (exclure celui en cours d'édition)
-    const existingBookings = appointments
-      .filter(a => a.id !== editingAppointment?.id)
-      .map(toBooking)
+    // RÈGLE NON NÉGOCIABLE : Convertir TOUS les appointments en Bookings
+    // Le scheduler va gérer la réorganisation complète
+    const existingBookings = appointments.map(toBooking)
 
-    // Préparer les paramètres pour le scheduler
+    // Préparer le nouveau booking à créer/modifier
     // RÈGLE CRITIQUE : Seuls les EVENT (anniversaire avec eventType !== 'game') bloquent une room
     // GAME (eventType === 'game' ou vide/null/undefined) = uniquement game-slots
     const isEvent = appointmentEventType && appointmentEventType !== 'game' && appointmentEventType.trim() !== ''
@@ -1621,73 +1620,56 @@ export default function AdminPage() {
       ? (appointmentDuration ?? 120)
       : (appointmentGameDuration ?? 60)
     
-    const params = {
+    // Vérifier si on a un flag confirmedSurbook (depuis popup)
+    const confirmedSurbook = (window as any).__pendingSurbookConfirmed === true
+    const confirmedRoomOvercap = (window as any).__pendingRoomOvercapConfirmed === true
+    if (confirmedSurbook) {
+      delete (window as any).__pendingSurbookConfirmed
+    }
+    if (confirmedRoomOvercap) {
+      delete (window as any).__pendingRoomOvercapConfirmed
+    }
+
+    const newBooking: Booking = {
+      id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: (isEvent ? 'event' : 'game') as 'game' | 'event',
       date: dateStr,
       hour: appointmentHour,
       minute: appointmentMinute,
       participants: appointmentParticipants ?? 0,
-      type: (isEvent ? 'event' : 'game') as 'game' | 'event',
       durationMinutes: eventDurationMinutes,
       gameDurationMinutes: isEvent 
         ? 60 // Pour EVENT, jeu toujours 60 min centré
         : (appointmentGameDuration ?? 60),
-      excludeBookingId: editingAppointment?.id
+      customerFirstName: appointmentCustomerFirstName || undefined,
+      customerLastName: appointmentCustomerLastName || undefined,
+      color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert (#22c55e) pour EVENT, bleu (#3b82f6) pour GAME
     }
 
-    // Utiliser le scheduler pour placer le booking
+    // RÈGLE NON NÉGOCIABLE : Le scheduler retourne TOUJOURS un nouvel état complet
+    // L'UI ne mute JAMAIS les appointments directement
     const roomConfigs = toRoomConfigs(roomCapacities)
-    let result
-
-    if (params.type === 'event') {
-      result = placeEventBooking(existingBookings, params, roomConfigs, false)
-    } else {
-      result = placeGameBooking(existingBookings, params, true, false) // allowSplit pour GAME, pas de surbook par défaut
-    }
+    const result = reorganizeAllBookingsForDate(
+      existingBookings,
+      newBooking,
+      dateStr,
+      roomConfigs,
+      true, // allowSplit pour GAME
+      confirmedSurbook, // allowSurbook si confirmé
+      confirmedRoomOvercap // allowRoomOvercap si confirmé
+    )
 
     // Gérer le résultat
-    if (result.success && result.allocation) {
-      // Placement réussi : créer/mettre à jour le booking
-      const newBooking: Booking = {
-        id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: params.type,
-        date: params.date,
-        hour: params.hour,
-        minute: params.minute,
-        participants: params.participants,
-        durationMinutes: params.durationMinutes,
-        gameDurationMinutes: params.gameDurationMinutes,
-        assignedSlots: result.allocation.slotAllocation?.slots,
-        assignedRoom: result.allocation.roomAllocation?.roomId,
-        customerFirstName: appointmentCustomerFirstName || undefined,
-        customerLastName: appointmentCustomerLastName || undefined,
-        color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert (#22c55e) pour EVENT, bleu (#3b82f6) pour GAME
-      }
-
-      // Convertir en SimpleAppointment et sauvegarder
-      const newAppointment = fromBooking(newBooking, editingAppointment || undefined)
-      
-      setAppointments(prev => {
-        let updated: SimpleAppointment[]
-        if (editingAppointment) {
-          updated = prev.map(a => a.id === editingAppointment.id ? newAppointment : a)
-        } else {
-          updated = [...prev, newAppointment]
-        }
-        
-        // Réorganiser tous les bookings de la date avec le scheduler
-        const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
-        const otherDates = updated.filter(a => a.date !== dateStr)
-        
-        // Guard strict : vérifier qu'il n'y a pas de chevauchement
-        // ROLLBACK si overlap détecté
-        const allBookings = reorganized.map(toBooking)
-        if (!assertNoOverlap(allBookings, dateStr, 'saveAppointment')) {
-          // Rollback : ne pas modifier l'état
-          return prev
-        }
-        
-        return [...otherDates, ...reorganized]
+    if (result.success) {
+      // SUCCÈS : Appliquer l'état complet retourné par le scheduler
+      // Convertir les bookings en SimpleAppointments
+      const newAppointments = result.bookings.map(b => {
+        const original = appointments.find(a => a.id === b.id)
+        return fromBooking(b, original)
       })
+      
+      // RÈGLE : setAppointments() n'est appelé QUE sur status === success
+      setAppointments(newAppointments)
 
       // Fermer le modal
       setShowAppointmentModal(false)
@@ -1704,13 +1686,13 @@ export default function AdminPage() {
       setAppointmentColor('#3b82f6')
     } else if (result.conflict) {
       // Gérer les conflits
-      // RÈGLE : FULL peut aussi proposer surbook si availableSlots > 0 ou si on force
-      const canSurbook = result.conflict.type === 'NEED_SURBOOK_CONFIRM' || 
-                        (result.conflict.type === 'FULL' && result.conflict.details && 
-                         (result.conflict.details.availableSlots === 0 || result.conflict.details.availableSlots! < (result.conflict.details.neededSlots || 0)))
+      // RÈGLE : En cas de NEED_SURBOOK_CONFIRM ou NEED_ROOM_OVERCAP_CONFIRM, AUCUN état n'est muté
+      // On affiche juste le popup, et si l'utilisateur accepte, on repasse par saveAppointment() avec le flag
+      
+      const canSurbook = result.conflict.type === 'NEED_SURBOOK_CONFIRM' || result.conflict.type === 'FULL'
       
       if (canSurbook || result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
-        // Afficher popup de confirmation
+        // Afficher popup de confirmation (SANS MUTER L'ÉTAT)
         if (canSurbook) {
           setOverlapInfo({
             slotsNeeded: result.conflict.details?.neededSlots || 0,
@@ -1719,11 +1701,10 @@ export default function AdminPage() {
           })
           setPendingSave(() => () => {
             // Marquer que le surbook est confirmé
-            // Cela permet à saveAppointment() de repasser avec allowSurbook=true
             (window as any).__pendingSurbookConfirmed = true
             
             // Réessayer avec surbook autorisé en repassant par saveAppointment
-            // Cela garantit que le backend (engine) accepte le surbook
+            // Cela garantit que le scheduler retourne un état complet
             saveAppointment()
             
             // Nettoyer le flag après un délai
@@ -1737,56 +1718,24 @@ export default function AdminPage() {
             roomNumber: result.conflict.details?.roomId || 0,
             roomName: `Salle ${result.conflict.details?.roomId || 0}`,
             maxCapacity: result.conflict.details?.roomCapacity || 0,
-            participants: params.participants
+            participants: newBooking.participants
           })
           setPendingRoomSave(() => () => {
-            // Réessayer avec room overcap autorisé
-            const overcapResult = placeEventBooking(existingBookings, params, roomConfigs, true)
-            if (overcapResult.success && overcapResult.allocation) {
-              const overcapBooking: Booking = {
-                id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                type: params.type,
-                date: params.date,
-                hour: params.hour,
-                minute: params.minute,
-                participants: params.participants,
-                durationMinutes: params.durationMinutes,
-                gameDurationMinutes: params.gameDurationMinutes,
-                assignedSlots: overcapResult.allocation.slotAllocation?.slots,
-                assignedRoom: overcapResult.allocation.roomAllocation?.roomId,
-                roomOvercap: true,
-                roomOvercapParticipants: result.conflict.details?.excessParticipants,
-                customerFirstName: appointmentCustomerFirstName || undefined,
-                customerLastName: appointmentCustomerLastName || undefined,
-                color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert pour EVENT, bleu pour GAME
-              }
-              const overcapAppointment = fromBooking(overcapBooking, editingAppointment || undefined)
-              setAppointments(prev => {
-                let updated: SimpleAppointment[]
-                if (editingAppointment) {
-                  updated = prev.map(a => a.id === editingAppointment.id ? overcapAppointment : a)
-                } else {
-                  updated = [...prev, overcapAppointment]
-                }
-                const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
-                const otherDates = updated.filter(a => a.date !== dateStr)
-                
-                // Guard strict : rollback si overlap
-                const allBookings = reorganized.map(toBooking)
-                if (!assertNoOverlap(allBookings, dateStr, 'saveAppointment-overcap')) {
-                  return prev // Rollback
-                }
-                
-                return [...otherDates, ...reorganized]
-              })
-              setShowAppointmentModal(false)
-              setEditingAppointment(null)
-            }
+            // Marquer que le room overcap est confirmé
+            (window as any).__pendingRoomOvercapConfirmed = true
+            
+            // Réessayer avec room overcap autorisé en repassant par saveAppointment
+            saveAppointment()
+            
+            // Nettoyer le flag après un délai
+            setTimeout(() => {
+              delete (window as any).__pendingRoomOvercapConfirmed
+            }, 1000)
           })
           setShowRoomCapacityConfirm(true)
         }
       } else {
-        // Autres conflits : refuser
+        // Autres conflits : refuser (SANS MUTER L'ÉTAT)
         alert(result.conflict.message)
       }
     }
