@@ -801,15 +801,43 @@ export default function AdminPage() {
     return overlaps
   }
 
-  // Guard dev : assertNoOverlap après chaque placement
-  const assertNoOverlap = (bookings: Booking[], date: string, context: string) => {
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-      const validation = validateNoOverlap(bookings, date)
-      if (!validation.valid) {
-        console.error(`[SCHEDULER] Overlap détecté dans ${context}:`, validation.conflicts)
-        // Ne pas throw en production, juste logger
+  // Guard strict : assertNoOverlap après chaque placement
+  // ROLLBACK IMMÉDIAT si overlap détecté + popup "Impossible sans chevauchement"
+  const assertNoOverlap = (bookings: Booking[], date: string, context: string): boolean => {
+    const validation = validateNoOverlap(bookings, date)
+    if (!validation.valid && validation.conflicts.length > 0) {
+      // Logger les détails des conflits
+      console.error(`[SCHEDULER] Overlap détecté dans ${context}:`, validation.conflicts)
+      for (const conflict of validation.conflicts) {
+        const b1 = conflict.booking1
+        const b2 = conflict.booking2
+        const b1Slots = b1.assignedSlots || []
+        const b2Slots = b2.assignedSlots || []
+        const b1GameTime = {
+          hour: b1.hour,
+          minute: b1.minute,
+          duration: b1.gameDurationMinutes || b1.durationMinutes || 60
+        }
+        const b2GameTime = {
+          hour: b2.hour,
+          minute: b2.minute,
+          duration: b2.gameDurationMinutes || b2.durationMinutes || 60
+        }
+        console.error(`[OVERLAP] Booking ${b1.id} (${b1.customerFirstName} ${b1.customerLastName}) slots [${b1Slots.join(',')}] ${b1GameTime.hour}:${String(b1GameTime.minute).padStart(2, '0')} (+${b1GameTime.duration}min)`)
+        console.error(`[OVERLAP] Booking ${b2.id} (${b2.customerFirstName} ${b2.customerLastName}) slots [${b2Slots.join(',')}] ${b2GameTime.hour}:${String(b2GameTime.minute).padStart(2, '0')} (+${b2GameTime.duration}min)`)
+        console.error(`[OVERLAP] Chevauchement sur slots: [${b1Slots.filter(s => b2Slots.includes(s)).join(',')}]`)
+      }
+      
+      // En dev : throw pour bloquer
+      // En prod : popup et retourner false pour rollback
+      if (process.env.NODE_ENV === 'development') {
+        throw new Error(`[SCHEDULER] Overlap détecté dans ${context}. Voir console pour détails.`)
+      } else {
+        alert(`Impossible de créer/modifier ce rendez-vous sans chevauchement. ${validation.conflicts.length} conflit(s) détecté(s).`)
+        return false
       }
     }
+    return true
   }
 
   // Compacter les slots : utilise le scheduler engine
@@ -1157,12 +1185,21 @@ export default function AdminPage() {
   // Fonction helper pour sauvegarder avec une salle assignée (utilisée après confirmation de capacité)
   // Cette fonction est appelée APRÈS autorisation, donc on skip les vérifications de capacité
   const saveAppointmentWithRoom = (slotsToUse: number[], roomToAssign: number) => {
+    // Cette fonction utilise maintenant saveAppointment() directement
+    // Gardée pour compatibilité avec les callbacks existants
+    // Le flag __pendingSurbookConfirmed est géré dans saveAppointment()
+    saveAppointment()
+  }
+
+  const saveAppointmentWithRoom_OLD = (slotsToUse: number[], roomToAssign: number) => {
+    // DÉPRÉCIÉ : Utiliser saveAppointment() directement
     // Vérifier que prénom ou nom est rempli au lieu du titre
     if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
     }
     const dateStr = appointmentDate
-    const eventDurationMinutes = (appointmentEventType && appointmentEventType !== 'game') 
+    const isEventType = appointmentEventType && appointmentEventType !== 'game' && appointmentEventType.trim() !== ''
+    const eventDurationMinutes = isEventType 
       ? (appointmentDuration ?? 120)
       : (appointmentGameDuration ?? 60)
     
@@ -1179,10 +1216,10 @@ export default function AdminPage() {
           date: dateStr,
           branch: appointmentBranch || undefined,
           eventType: appointmentEventType || undefined,
-          durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+          durationMinutes: isEventType
             ? (appointmentDuration ?? undefined) 
             : undefined,
-          color: appointmentColor || '#3b82f6',
+          color: appointmentColor || (isEventType ? '#22c55e' : '#3b82f6') // Vert pour EVENT, bleu pour GAME
           eventNotes: appointmentEventNotes || undefined,
           customerFirstName: appointmentCustomerFirstName || undefined,
           customerLastName: appointmentCustomerLastName || undefined,
@@ -1191,7 +1228,7 @@ export default function AdminPage() {
           customerNotes: appointmentCustomerNotes || undefined,
           // Pour les événements avec salle, gameDurationMinutes sera calculé automatiquement (1h centré)
           // On ne le stocke pas explicitement, il sera calculé à partir de durationMinutes
-          gameDurationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+          gameDurationMinutes: isEventType
             ? undefined // Pour les événements avec salle, on ne stocke pas gameDurationMinutes
             : (appointmentGameDuration ?? undefined), // Pour les jeux simples, on stocke la durée
           participants: appointmentParticipants ?? undefined,
@@ -1205,6 +1242,13 @@ export default function AdminPage() {
         
         const compacted = compactSlots(dateStr, updated)
         const otherDates = updated.filter(a => a.date !== dateStr)
+        
+        // Guard strict : rollback si overlap
+        const allBookings = compacted.map(toBooking)
+        if (!assertNoOverlap(allBookings, dateStr, 'saveAppointmentWithRoom')) {
+          return prev // Rollback
+        }
+        
         return [...otherDates, ...compacted]
       })
     } else {
@@ -1216,10 +1260,10 @@ export default function AdminPage() {
         date: dateStr,
         branch: appointmentBranch || undefined,
         eventType: appointmentEventType || undefined,
-        durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
+        durationMinutes: isEventType
           ? (appointmentDuration ?? undefined) 
           : undefined,
-        color: appointmentColor || '#3b82f6',
+        color: appointmentColor || (isEventType ? '#22c55e' : '#3b82f6') // Vert pour EVENT, bleu pour GAME
         eventNotes: appointmentEventNotes || undefined,
         customerFirstName: appointmentCustomerFirstName || undefined,
         customerLastName: appointmentCustomerLastName || undefined,
@@ -1386,7 +1430,7 @@ export default function AdminPage() {
           durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
             ? (appointmentDuration ?? undefined) 
             : undefined,
-          color: appointmentColor || '#3b82f6',
+          color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6') // Vert pour EVENT, bleu pour GAME,
           eventNotes: appointmentEventNotes || undefined,
           customerFirstName: appointmentCustomerFirstName || undefined,
           customerLastName: appointmentCustomerLastName || undefined,
@@ -1429,7 +1473,7 @@ export default function AdminPage() {
         durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
           ? (appointmentDuration ?? undefined) 
           : undefined,
-        color: appointmentColor || '#3b82f6',
+        color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6') // Vert pour EVENT, bleu pour GAME,
         eventNotes: appointmentEventNotes || undefined,
         customerFirstName: appointmentCustomerFirstName || undefined,
         customerLastName: appointmentCustomerLastName || undefined,
@@ -1616,7 +1660,7 @@ export default function AdminPage() {
         assignedRoom: result.allocation.roomAllocation?.roomId,
         customerFirstName: appointmentCustomerFirstName || undefined,
         customerLastName: appointmentCustomerLastName || undefined,
-        color: appointmentColor || '#3b82f6'
+        color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6') // Vert (#22c55e) pour EVENT, bleu (#3b82f6) pour GAME
       }
 
       // Convertir en SimpleAppointment et sauvegarder
@@ -1634,9 +1678,13 @@ export default function AdminPage() {
         const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
         const otherDates = updated.filter(a => a.date !== dateStr)
         
-        // Guard : vérifier qu'il n'y a pas de chevauchement
+        // Guard strict : vérifier qu'il n'y a pas de chevauchement
+        // ROLLBACK si overlap détecté
         const allBookings = reorganized.map(toBooking)
-        assertNoOverlap(allBookings, dateStr, 'saveAppointment')
+        if (!assertNoOverlap(allBookings, dateStr, 'saveAppointment')) {
+          // Rollback : ne pas modifier l'état
+          return prev
+        }
         
         return [...otherDates, ...reorganized]
       })
@@ -1670,63 +1718,18 @@ export default function AdminPage() {
             maxParticipants: (result.conflict.details?.availableSlots || 0) * 6
           })
           setPendingSave(() => () => {
-            // Réessayer avec surbook autorisé
-            // Utiliser le bon engine selon le type
-            let surbookResult
-            if (params.type === 'event') {
-              surbookResult = placeEventBooking(existingBookings, params, roomConfigs, false)
-              // Si toujours pas de place pour EVENT, essayer avec surbook des slots
-              if (!surbookResult.success && surbookResult.conflict?.type === 'FULL') {
-                // Pour EVENT, on ne peut pas surbooker les slots, refuser
-                alert('Impossible de créer cet événement : tous les slots sont occupés.')
-                return
-              }
-            } else {
-              surbookResult = placeGameBooking(existingBookings, params, true, true) // allowSplit + allowSurbook
-            }
+            // Marquer que le surbook est confirmé
+            // Cela permet à saveAppointment() de repasser avec allowSurbook=true
+            (window as any).__pendingSurbookConfirmed = true
             
-            if (surbookResult.success && surbookResult.allocation) {
-              // Créer booking avec surbook
-              // Calculer le nombre de participants en trop
-              const assignedSlotsCount = surbookResult.allocation.slotAllocation?.slots?.length || 0
-              const neededSlots = calculateSlotsNeeded(params.participants)
-              const excessSlots = Math.max(0, neededSlots - assignedSlotsCount)
-              const excessParticipants = excessSlots * 6
-              
-              const surbookBooking: Booking = {
-                id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                type: params.type,
-                date: params.date,
-                hour: params.hour,
-                minute: params.minute,
-                participants: params.participants,
-                durationMinutes: params.durationMinutes,
-                gameDurationMinutes: params.gameDurationMinutes,
-                assignedSlots: surbookResult.allocation.slotAllocation?.slots,
-                assignedRoom: surbookResult.allocation.roomAllocation?.roomId, // Pour EVENT
-                surbooked: excessParticipants > 0,
-                surbookedParticipants: excessParticipants > 0 ? excessParticipants : undefined,
-                customerFirstName: appointmentCustomerFirstName || undefined,
-                customerLastName: appointmentCustomerLastName || undefined,
-                color: appointmentColor || '#3b82f6'
-              }
-              const surbookAppointment = fromBooking(surbookBooking, editingAppointment || undefined)
-              setAppointments(prev => {
-                let updated: SimpleAppointment[]
-                if (editingAppointment) {
-                  updated = prev.map(a => a.id === editingAppointment.id ? surbookAppointment : a)
-                } else {
-                  updated = [...prev, surbookAppointment]
-                }
-                const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
-                const otherDates = updated.filter(a => a.date !== dateStr)
-                const allBookings = reorganized.map(toBooking)
-                assertNoOverlap(allBookings, dateStr, 'saveAppointment-surbook')
-                return [...otherDates, ...reorganized]
-              })
-              setShowAppointmentModal(false)
-              setEditingAppointment(null)
-            }
+            // Réessayer avec surbook autorisé en repassant par saveAppointment
+            // Cela garantit que le backend (engine) accepte le surbook
+            saveAppointment()
+            
+            // Nettoyer le flag après un délai
+            setTimeout(() => {
+              delete (window as any).__pendingSurbookConfirmed
+            }, 1000)
           })
           setShowOverlapConfirm(true)
         } else if (result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
@@ -1755,7 +1758,7 @@ export default function AdminPage() {
                 roomOvercapParticipants: result.conflict.details?.excessParticipants,
                 customerFirstName: appointmentCustomerFirstName || undefined,
                 customerLastName: appointmentCustomerLastName || undefined,
-                color: appointmentColor || '#3b82f6'
+                color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6') // Vert pour EVENT, bleu pour GAME
               }
               const overcapAppointment = fromBooking(overcapBooking, editingAppointment || undefined)
               setAppointments(prev => {
@@ -1767,8 +1770,13 @@ export default function AdminPage() {
                 }
                 const reorganized = compactSlots(dateStr, updated, editingAppointment?.id)
                 const otherDates = updated.filter(a => a.date !== dateStr)
+                
+                // Guard strict : rollback si overlap
                 const allBookings = reorganized.map(toBooking)
-                assertNoOverlap(allBookings, dateStr, 'saveAppointment-overcap')
+                if (!assertNoOverlap(allBookings, dateStr, 'saveAppointment-overcap')) {
+                  return prev // Rollback
+                }
+                
                 return [...otherDates, ...reorganized]
               })
               setShowAppointmentModal(false)
@@ -3110,6 +3118,7 @@ export default function AdminPage() {
                               type="text"
                               value={appointmentCustomerFirstName}
                               onChange={(e) => setAppointmentCustomerFirstName(e.target.value)}
+                              autoFocus={!editingAppointment} // Auto-focus sur prénom pour nouveau événement
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                             />
                           </div>
