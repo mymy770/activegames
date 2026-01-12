@@ -600,10 +600,8 @@ export default function AdminPage() {
 
     // IMPORTANT : Trouver automatiquement les slots disponibles (gauche → droite)
     // Le slot cliqué par l'utilisateur n'est PAS utilisé pour l'assignation
-    // On doit trouver un GROUPE de slots consécutifs qui sont TOUS disponibles simultanément
-    // sur TOUTE la durée (de startMinutes à endMinutes)
     
-    // Parcourir tous les groupes possibles de slots consécutifs
+    // ÉTAPE 1 : Essayer d'abord de trouver des slots consécutifs
     for (let startSlot = 1; startSlot <= TOTAL_SLOTS - slotsNeeded + 1; startSlot++) {
       const candidateSlots: number[] = []
       
@@ -611,7 +609,7 @@ export default function AdminPage() {
       let allAvailable = true
       for (let i = 0; i < slotsNeeded; i++) {
         const slot = startSlot + i
-        if (slot > 14) {
+        if (slot > TOTAL_SLOTS) {
           allAvailable = false
           break
         }
@@ -634,7 +632,31 @@ export default function AdminPage() {
       }
     }
 
-    // Aucun groupe de slots consécutifs disponible trouvé
+    // ÉTAPE 2 : Si pas assez de slots consécutifs, prendre les slots disponibles non consécutifs
+    // Priorité : gauche → droite (slots les plus petits d'abord)
+    const availableSlots: number[] = []
+    
+    // Parcourir tous les slots de gauche à droite
+    for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
+      // Vérifier que ce slot est disponible sur TOUTE la durée
+      let slotAvailable = true
+      for (let min = startMinutes; min < endMinutes; min += 15) {
+        if (!slotAvailability[slot] || slotAvailability[slot][min] === undefined || !slotAvailability[slot][min]) {
+          slotAvailable = false
+          break
+        }
+      }
+      
+      if (slotAvailable) {
+        availableSlots.push(slot)
+        // Si on a trouvé assez de slots, on s'arrête
+        if (availableSlots.length >= slotsNeeded) {
+          return availableSlots.slice(0, slotsNeeded).sort((a, b) => a - b)
+        }
+      }
+    }
+
+    // Pas assez de slots disponibles (même non consécutifs)
     return null
   }
 
