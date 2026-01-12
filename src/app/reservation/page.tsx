@@ -51,6 +51,7 @@ export default function ReservationPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [showTermsModal, setShowTermsModal] = useState(false)
   const [reservationNumber, setReservationNumber] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const savedLocale = localStorage.getItem('locale') as Locale
@@ -197,16 +198,53 @@ export default function ReservationPage() {
     setBookingData({ ...bookingData, eventAge: age })
   }
 
-  const handleConfirm = () => {
-    // TODO: Submit booking data to backend
-    console.log('Booking confirmed:', bookingData)
-    // Generate a temporary reservation number (format: AG-YYYYMMDD-HHMMSS)
-    const now = new Date()
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
-    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
-    const tempReservationNumber = `AG-${dateStr}-${timeStr}`
-    setReservationNumber(tempReservationNumber)
-    setStep(6)
+  const handleConfirm = async () => {
+    setIsSubmitting(true)
+    try {
+      // Generate reservation number (format: AG-YYYYMMDD-HHMMSS)
+      const now = new Date()
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+      const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
+      const tempReservationNumber = `AG-${dateStr}-${timeStr}`
+      
+      // Sauvegarder la réservation via l'API
+      const response = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          branch: bookingData.branch,
+          type: bookingData.type,
+          players: bookingData.players,
+          date: bookingData.date,
+          time: bookingData.time,
+          firstName: bookingData.firstName,
+          lastName: bookingData.lastName,
+          phone: bookingData.phone,
+          email: bookingData.email || null,
+          specialRequest: bookingData.specialRequest || null,
+          eventType: bookingData.eventType || null,
+          eventAge: bookingData.eventAge || null,
+          reservationNumber: tempReservationNumber,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setReservationNumber(tempReservationNumber)
+        setStep(6)
+      } else {
+        console.error('Error saving reservation:', result.error)
+        alert('Erreur lors de la sauvegarde de la réservation. Veuillez réessayer.')
+      }
+    } catch (error) {
+      console.error('Error confirming reservation:', error)
+      alert('Erreur lors de la confirmation. Veuillez réessayer.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const formatDate = (dateString: string) => {
@@ -1193,6 +1231,7 @@ export default function ReservationPage() {
             <button
               onClick={handleConfirm}
               disabled={
+                isSubmitting ||
                 !bookingData.firstName || 
                 !bookingData.lastName || 
                 !bookingData.phone || 
@@ -1200,6 +1239,7 @@ export default function ReservationPage() {
                 (bookingData.type === 'event' && !bookingData.eventType)
               }
               className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl transition-all duration-300 ${
+                !isSubmitting &&
                 bookingData.firstName && 
                 bookingData.lastName && 
                 bookingData.phone && 
@@ -1218,8 +1258,17 @@ export default function ReservationPage() {
                 ) ? 1 : 0.75
               }}
             >
-              {translations.booking?.confirm || 'Confirm booking'}
-              <Check className="w-5 h-5" />
+              {isSubmitting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  {translations.booking?.confirm || 'Confirm booking'}
+                  <Check className="w-5 h-5" />
+                </>
+              )}
             </button>
           )}
         </div>
