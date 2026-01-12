@@ -569,7 +569,9 @@ export default function AdminPage() {
     }
 
     // Fonction pour vérifier si des slots sont disponibles pour un créneau
-    const areSlotsAvailable = (slots: number[], startMinutes: number, endMinutes: number): boolean => {
+    // Vérifie à la fois slotUsage ET les rendez-vous déjà placés dans compactedAppointments
+    const areSlotsAvailable = (slots: number[], startMinutes: number, endMinutes: number, excludeAppointmentId?: string): boolean => {
+      // Vérifier d'abord dans slotUsage
       for (const slot of slots) {
         const occupiedMinutes = slotUsage.get(slot)
         if (!occupiedMinutes) return false
@@ -580,6 +582,28 @@ export default function AdminPage() {
           }
         }
       }
+      
+      // Vérifier aussi les conflits avec les rendez-vous déjà placés
+      for (const existing of compactedAppointments) {
+        if (excludeAppointmentId && existing.id === excludeAppointmentId) continue
+        
+        const existingStart = existing.hour * 60 + (existing.minute || 0)
+        const existingDuration = existing.gameDurationMinutes || existing.durationMinutes || 60
+        const existingEnd = existingStart + existingDuration
+        const existingSlots = existing.assignedSlots || []
+        
+        // Vérifier si les créneaux se chevauchent
+        const timeOverlap = existingStart < endMinutes && existingEnd > startMinutes
+        
+        if (timeOverlap) {
+          // Vérifier si les slots se chevauchent
+          const slotOverlap = slots.some(slot => existingSlots.includes(slot))
+          if (slotOverlap) {
+            return false // Conflit détecté
+          }
+        }
+      }
+      
       return true
     }
 
@@ -621,13 +645,13 @@ export default function AdminPage() {
       const currentSlots = appointment.assignedSlots || []
       
       // Essayer d'abord de garder les slots actuels s'ils sont disponibles
-      if (currentSlots.length === slotsNeeded && areSlotsAvailable(currentSlots, startMinutes, endMinutes)) {
+      if (currentSlots.length === slotsNeeded && areSlotsAvailable(currentSlots, startMinutes, endMinutes, appointment.id)) {
         bestSlots = currentSlots
       } else {
         // Essayer de trouver des slots consécutifs
         for (let startSlot = 1; startSlot <= TOTAL_SLOTS - slotsNeeded + 1; startSlot++) {
           const candidateSlots = Array.from({ length: slotsNeeded }, (_, i) => startSlot + i)
-          if (areSlotsAvailable(candidateSlots, startMinutes, endMinutes)) {
+          if (areSlotsAvailable(candidateSlots, startMinutes, endMinutes, appointment.id)) {
             bestSlots = candidateSlots
             break
           }
@@ -639,6 +663,7 @@ export default function AdminPage() {
           for (let slot = 1; slot <= TOTAL_SLOTS; slot++) {
             if (availableSlots.length >= slotsNeeded) break
             
+            // Vérifier d'abord dans slotUsage
             const occupiedMinutes = slotUsage.get(slot)
             if (occupiedMinutes) {
               let isAvailable = true
@@ -648,6 +673,23 @@ export default function AdminPage() {
                   break
                 }
               }
+              
+              // Vérifier aussi les conflits avec les rendez-vous déjà placés
+              if (isAvailable) {
+                for (const existing of compactedAppointments) {
+                  const existingStart = existing.hour * 60 + (existing.minute || 0)
+                  const existingDuration = existing.gameDurationMinutes || existing.durationMinutes || 60
+                  const existingEnd = existingStart + existingDuration
+                  const existingSlots = existing.assignedSlots || []
+                  
+                  const timeOverlap = existingStart < endMinutes && existingEnd > startMinutes
+                  if (timeOverlap && existingSlots.includes(slot)) {
+                    isAvailable = false
+                    break
+                  }
+                }
+              }
+              
               if (isAvailable) {
                 availableSlots.push(slot)
               }
@@ -708,7 +750,7 @@ export default function AdminPage() {
             for (let startSlot = 1; startSlot <= TOTAL_SLOTS - existingSlotsNeeded + 1; startSlot++) {
               const candidateSlots = Array.from({ length: existingSlotsNeeded }, (_, i) => startSlot + i)
               // Vérifier que ces slots ne sont pas dans les slots qu'on va assigner
-              if (!candidateSlots.some(slot => bestSlots!.includes(slot)) && areSlotsAvailable(candidateSlots, existingStart, existingEnd)) {
+              if (!candidateSlots.some(slot => bestSlots!.includes(slot)) && areSlotsAvailable(candidateSlots, existingStart, existingEnd, conflict.appointment.id)) {
                 newSlots = candidateSlots
                 break
               }
