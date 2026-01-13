@@ -467,17 +467,14 @@ export function placeGameBooking(
   if (allowSurbook && availableCount > 0) {
     // Placer avec les slots disponibles (même si moins que nécessaire)
     const slotsToAssign = availableSlots.slice(0, Math.min(availableCount, slotsNeeded)).sort((a, b) => a - b)
+    // Note : surbooked sera calculé lors de la mise à jour du Booking (slotsToAssign.length < slotsNeeded)
     return {
       success: true,
       allocation: {
         slotAllocation: {
           slots: slotsToAssign,
           isSplit: false
-        },
-        surbooked: slotsToAssign.length < slotsNeeded,
-        surbookedParticipants: slotsToAssign.length < slotsNeeded 
-          ? (slotsNeeded - slotsToAssign.length) * SLOTS_PER_PERSON
-          : 0
+        }
       }
     }
   }
@@ -667,13 +664,8 @@ export function placeEventBooking(
           (params.minute + eventDuration) % 60
         )
       },
-      slotAllocation: gameResult.allocation?.slotAllocation,
-      surbooked: gameResult.allocation?.surbooked || false,
-      surbookedParticipants: gameResult.allocation?.surbookedParticipants || 0,
-      roomOvercap: roomResult.config.maxCapacity < params.participants,
-      roomOvercapParticipants: roomResult.config.maxCapacity < params.participants 
-        ? params.participants - roomResult.config.maxCapacity 
-        : 0
+      slotAllocation: gameResult.allocation?.slotAllocation
+      // Note : surbooked et roomOvercap seront calculés lors de la mise à jour du Booking
     }
   }
 }
@@ -759,18 +751,39 @@ export function reorganizeAllBookingsForDate(
     }
 
     if (result && result.success && result.allocation) {
+      // Calculer surbooking si nécessaire (slots assignés < slots nécessaires)
+      const assignedSlotsCount = result.allocation.slotAllocation?.slots?.length || 0
+      const slotsNeededForBooking = calculateSlotsNeeded(booking.participants)
+      const isSurbooked = assignedSlotsCount < slotsNeededForBooking
+      const surbookedParticipants = isSurbooked 
+        ? (slotsNeededForBooking - assignedSlotsCount) * SLOTS_PER_PERSON
+        : 0
+      
+      // Calculer room overcap si nécessaire (pour EVENT uniquement)
+      let isRoomOvercap = false
+      let roomOvercapParticipants = 0
+      if (booking.type === 'event' && result.allocation.roomAllocation) {
+        // Trouver la capacité de la salle assignée
+        const assignedRoomId = result.allocation.roomAllocation.roomId
+        const roomConfig = roomConfigs.get(assignedRoomId)
+        if (roomConfig && booking.participants > roomConfig.maxCapacity) {
+          isRoomOvercap = true
+          roomOvercapParticipants = booking.participants - roomConfig.maxCapacity
+        }
+      }
+      
       // Mettre à jour le booking avec la nouvelle allocation
       const updatedBooking: Booking = {
         ...booking,
         assignedSlots: result.allocation.slotAllocation?.slots,
         assignedRoom: result.allocation.roomAllocation?.roomId,
-        surbooked: result.allocation.surbooked || false,
-        surbookedParticipants: result.allocation.surbookedParticipants || 0,
-        roomOvercap: result.allocation.roomOvercap || false,
-        roomOvercapParticipants: result.allocation.roomOvercapParticipants || 0,
-        split: result.allocation.split || false,
-        splitParts: result.allocation.splitParts || 1,
-        splitIndex: result.allocation.splitIndex || 0,
+        surbooked: isSurbooked,
+        surbookedParticipants: surbookedParticipants,
+        roomOvercap: isRoomOvercap,
+        roomOvercapParticipants: roomOvercapParticipants,
+        split: result.allocation.slotAllocation?.isSplit || false,
+        splitParts: result.allocation.slotAllocation?.splitParts || 1,
+        splitIndex: result.allocation.slotAllocation?.splitIndex || 0,
       }
       
       // Ajouter le booking avec les slots assignés
