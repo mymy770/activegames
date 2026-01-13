@@ -1117,8 +1117,25 @@ export default function AdminPage() {
   const openEditAppointmentModal = (appointment: SimpleAppointment) => {
     setEditingAppointment(appointment)
     // Ne plus charger le titre, il sera généré automatiquement
-    setAppointmentHour(appointment.hour)
-    setAppointmentMinute(appointment.minute || 0)
+    
+    // IMPORTANT : Pour les EVENT avec assignedSlots, utiliser l'heure du jeu (centré), pas l'heure de la room
+    // Le jeu est indépendant de la room une fois créé
+    const isEvent = appointment.eventType && appointment.eventType !== 'game' && appointment.eventType.trim() !== ''
+    if (isEvent && appointment.assignedSlots && appointment.assignedSlots.length > 0) {
+      // Pour EVENT avec slots, utiliser l'heure du jeu centré
+      const { gameStartMinutes, gameDurationMinutes } = calculateCenteredGameTime(appointment)
+      const gameStartHour = Math.floor(gameStartMinutes / 60)
+      const gameStartMinute = gameStartMinutes % 60
+      setAppointmentHour(gameStartHour)
+      setAppointmentMinute(gameStartMinute)
+      setAppointmentGameDuration(gameDurationMinutes)
+    } else {
+      // Pour GAME ou EVENT sans slots, utiliser l'heure normale
+      setAppointmentHour(appointment.hour)
+      setAppointmentMinute(appointment.minute || 0)
+      setAppointmentGameDuration(appointment.gameDurationMinutes ?? 60)
+    }
+    
     setAppointmentDate(appointment.date)
     setAppointmentBranch(appointment.branch || '')
     setAppointmentEventType(appointment.eventType || '')
@@ -1130,7 +1147,6 @@ export default function AdminPage() {
     setAppointmentCustomerPhone(appointment.customerPhone || '')
     setAppointmentCustomerEmail(appointment.customerEmail || '')
     setAppointmentCustomerNotes(appointment.customerNotes || '')
-    setAppointmentGameDuration(appointment.gameDurationMinutes ?? 60)
     setAppointmentParticipants(appointment.participants ?? null)
     setAppointmentRoom(appointment.assignedRoom ?? null)
     setShowAppointmentModal(true)
