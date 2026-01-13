@@ -2755,7 +2755,7 @@ export default function AdminPage() {
                         // Pour les salles, utiliser la durée de l'événement (durationMinutes)
                         // Si c'est un jeu standard, utiliser gameDurationMinutes à la place
                         const eventDuration = (appointment.eventType && appointment.eventType !== 'game')
-                          ? (appointment.durationMinutes || 120)
+                          ? (appointment.durationMinutes || 60)
                           : (appointment.gameDurationMinutes || 60)
                         const appointmentEndMinutes = appointmentStartMinutes + eventDuration
                         const assignedRoom = appointment.assignedRoom!
