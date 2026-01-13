@@ -49,6 +49,11 @@ export function findContiguousSlots(
   timeKeys: TimeKey[],
   excludeBookingId?: string
 ): number[] | null {
+  // VÉRIFICATION CRITIQUE : Si on a besoin de plus de slots que disponibles, retourner null immédiatement
+  if (slotsNeeded > TOTAL_SLOTS) {
+    return null
+  }
+  
   // Chercher de gauche à droite (slot 1, 2, 3...)
   for (let startSlot = 1; startSlot <= TOTAL_SLOTS - slotsNeeded + 1; startSlot++) {
     const candidateSlots = Array.from({ length: slotsNeeded }, (_, i) => startSlot + i)
@@ -228,6 +233,12 @@ export function allocateLeftToRight(
   state: OccupancyState
 ): { slots: number[]; updatedBookings: Booking[] } | null {
   const slotsNeeded = calculateSlotsNeeded(params.participants)
+  
+  // VÉRIFICATION CRITIQUE : Si on a besoin de plus de slots que disponibles, retourner null immédiatement
+  // Cela forcera placeGameBooking à détecter le surbooking et demander confirmation
+  if (slotsNeeded > TOTAL_SLOTS) {
+    return null
+  }
   
   // Calculer les timeKeys pour le jeu
   // IMPORTANT : Pour les EVENT, utiliser toujours 60 min pour le jeu (centré), pas durationMinutes
@@ -933,6 +944,7 @@ export function reorganizeAllBookingsForDate(
       }
       
       // Mettre à jour le booking avec la nouvelle allocation
+      // IMPORTANT : Préserver explicitement tous les autres champs du booking original
       const updatedBooking: Booking = {
         ...booking,
         assignedSlots: result.allocation.slotAllocation?.slots,

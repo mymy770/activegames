@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Grid, CalendarDays, Sun, Moon, Settings, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CalendarDays, Sun, Moon, Settings, Trash2 } from 'lucide-react'
 import { Reservation } from '@/lib/reservations'
 // Scheduler imports
 import { reorganizeAllBookingsForDate, validateNoOverlap, calculateSlotsNeeded, placeEventBooking, placeGameBooking } from '@/lib/scheduler/engine'
@@ -9,10 +9,6 @@ import { toRoomConfigs, toBooking, fromBooking } from '@/lib/scheduler/adapters'
 import type { Booking } from '@/lib/scheduler/types'
 import { requiresConfirmation, getConflictDetails } from '@/lib/scheduler/exceptions'
 
-// Tri pour la vue CRM (contacts)
-type SortField = 'createdAt' | 'firstName' | 'lastName' | 'phone' | 'email' | 'branch' | 'source'
-type SortDirection = 'asc' | 'desc' | null
-type ViewMode = 'table' | 'agenda'
 type AgendaView = 'week' | 'day'
 type Theme = 'light' | 'dark'
 
@@ -43,19 +39,6 @@ type SimpleAppointment = {
   roomOvercapParticipants?: number
 }
 
-// Type pour la vue CRM (contacts)
-type ContactRow = {
-  id: string
-  firstName: string | null
-  lastName: string | null
-  phone: string
-  email: string | null
-  notes: string | null
-  branch: string | null
-  source: string
-  createdAt: string
-}
-
 export default function AdminPage() {
   // ===== CONFIGURATION FLEXIBLE =====
   // Modifiez ces valeurs pour ajouter/supprimer des slots ou des rooms
@@ -67,21 +50,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [theme, setTheme] = useState<Theme>('light')
-  // Données CRM (contacts)
-  const [contacts, setContacts] = useState<ContactRow[]>([])
-  const [allContacts, setAllContacts] = useState<ContactRow[]>([])
-  const [contactSuggestions, setContactSuggestions] = useState<ContactRow[]>([])
-  const [showContactSuggestions, setShowContactSuggestions] = useState(false)
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
-  const [isContactEditable, setIsContactEditable] = useState(false) // Protection : champs client gelés par défaut
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [crmSearchQuery, setCrmSearchQuery] = useState('') // Recherche dans le CRM (contacts)
   const [agendaSearchQuery, setAgendaSearchQuery] = useState('') // Recherche dans l'Agenda (appointments)
-  const [sortField, setSortField] = useState<SortField>('createdAt')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  // Par défaut, ouvrir directement l'agenda
-  const [viewMode, setViewMode] = useState<ViewMode>('agenda')
   const [agendaView, setAgendaView] = useState<AgendaView>('day')
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const today = new Date()
@@ -100,12 +69,6 @@ export default function AdminPage() {
     const monday = new Date(today.setDate(diff))
     monday.setHours(0, 0, 0, 0)
     return monday
-  })
-  // Filtres pour la vue CRM (pour l'instant uniquement branch)
-  const [columnFilters, setColumnFilters] = useState<{
-    branch?: string
-  }>({
-    branch: 'all',
   })
   const [appointments, setAppointments] = useState<SimpleAppointment[]>([])
   const [showAppointmentModal, setShowAppointmentModal] = useState(false)
@@ -164,14 +127,13 @@ export default function AdminPage() {
   const [isDraggingModal, setIsDraggingModal] = useState(false)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
 
-  // Vérifier si déjà authentifié, charger thème + rendez-vous simples + config modal + contacts CRM
+  // Vérifier si déjà authentifié, charger thème + rendez-vous simples + config modal
   useEffect(() => {
     if (typeof window === 'undefined') return
     
     const auth = localStorage.getItem('admin_authenticated')
     if (auth === 'true') {
       setAuthenticated(true)
-      loadContacts()
     }
     const savedTheme = localStorage.getItem('admin_theme') as Theme
     if (savedTheme) {
@@ -316,7 +278,6 @@ export default function AdminPage() {
       if (result.success) {
         setAuthenticated(true)
         localStorage.setItem('admin_authenticated', 'true')
-        loadContacts()
       } else {
         alert(result.error || 'Mot de passe incorrect')
       }
@@ -328,8 +289,6 @@ export default function AdminPage() {
   const handleLogout = () => {
     setAuthenticated(false)
     localStorage.removeItem('admin_authenticated')
-    setContacts([])
-    setAllContacts([])
   }
 
   // Fonction pour vider tous les événements
@@ -380,153 +339,6 @@ export default function AdminPage() {
     }
   }
 
-  // Met à jour les suggestions de contacts à partir d'un fragment tapé (nom, téléphone, email...)
-  const updateContactSuggestions = (query: string) => {
-    const q = query.trim().toLowerCase()
-    if (!q || allContacts.length === 0) {
-      setContactSuggestions([])
-      setShowContactSuggestions(false)
-      setSelectedContactId(null)
-      return
-    }
-
-    const matches = allContacts
-      .filter((c) => {
-        return (
-          (c.firstName && c.firstName.toLowerCase().includes(q)) ||
-          (c.lastName && c.lastName.toLowerCase().includes(q)) ||
-          c.phone.toLowerCase().includes(q) ||
-          (c.email && c.email.toLowerCase().includes(q))
-        )
-      })
-      .slice(0, 10)
-
-    setContactSuggestions(matches)
-    setShowContactSuggestions(matches.length > 0)
-  }
-
-  // Quand on choisit un contact dans la liste, on remplit les champs client
-  const handleSelectContact = (contact: ContactRow) => {
-    setSelectedContactId(contact.id)
-    setAppointmentCustomerFirstName(contact.firstName || '')
-    setAppointmentCustomerLastName(contact.lastName || '')
-    setAppointmentCustomerPhone(contact.phone)
-    setAppointmentCustomerEmail(contact.email || '')
-    setAppointmentCustomerNotes(contact.notes || '')
-    setShowContactSuggestions(false)
-    // Re-geler les champs après sélection (protection)
-    setIsContactEditable(false)
-  }
-
-  // Charger les contacts CRM
-  const loadContacts = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch('/api/contacts')
-      const result = await response.json()
-      
-      if (result.success) {
-        const list: ContactRow[] = result.contacts || []
-        setAllContacts(list)
-
-        let filtered = list
-
-        // Filtre par branch
-        if (columnFilters.branch && columnFilters.branch !== 'all') {
-          filtered = filtered.filter((c: ContactRow) => c.branch === columnFilters.branch)
-        }
-
-        // Recherche texte (CRM uniquement)
-        if (crmSearchQuery) {
-          const searchLower = crmSearchQuery.toLowerCase()
-          filtered = filtered.filter((c: ContactRow) => 
-            (c.firstName && c.firstName.toLowerCase().includes(searchLower)) ||
-            (c.lastName && c.lastName.toLowerCase().includes(searchLower)) ||
-            c.phone.toLowerCase().includes(searchLower) ||
-            (c.email && c.email.toLowerCase().includes(searchLower)) ||
-            (c.notes && c.notes.toLowerCase().includes(searchLower)) ||
-            (c.branch && c.branch.toLowerCase().includes(searchLower)) ||
-            (c.source && c.source.toLowerCase().includes(searchLower))
-          )
-        }
-
-        // Tri
-        if (sortField && sortDirection) {
-          filtered.sort((a: ContactRow, b: ContactRow) => {
-            let aVal: any
-            let bVal: any
-            
-            switch (sortField) {
-              case 'createdAt':
-                aVal = new Date(a.createdAt).getTime()
-                bVal = new Date(b.createdAt).getTime()
-                break
-              case 'firstName':
-                aVal = (a.firstName || '').toLowerCase()
-                bVal = (b.firstName || '').toLowerCase()
-                break
-              case 'lastName':
-                aVal = (a.lastName || '').toLowerCase()
-                bVal = (b.lastName || '').toLowerCase()
-                break
-              case 'phone':
-                aVal = a.phone
-                bVal = b.phone
-                break
-              case 'email':
-                aVal = (a.email || '').toLowerCase()
-                bVal = (b.email || '').toLowerCase()
-                break
-              case 'branch':
-                aVal = (a.branch || '').toLowerCase()
-                bVal = (b.branch || '').toLowerCase()
-                break
-              case 'source':
-                aVal = (a.source || '').toLowerCase()
-                bVal = (b.source || '').toLowerCase()
-                break
-              default:
-                return 0
-            }
-            
-            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
-            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
-            return 0
-          })
-        }
-
-        setContacts(filtered)
-      } else {
-        setError(result.error || 'Erreur lors du chargement des contacts')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors du chargement')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      if (sortDirection === 'asc') {
-        setSortDirection('desc')
-      } else if (sortDirection === 'desc') {
-        setSortDirection(null)
-        setSortField('createdAt')
-        setSortDirection('desc')
-      } else {
-        setSortDirection('asc')
-      }
-    } else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
-
-  const handleColumnFilter = (field: 'branch', value: string) => {
-    setColumnFilters({ ...columnFilters, [field]: value })
-  }
 
   // Générer le titre de l'événement à partir du prénom et nom
   const generateAppointmentTitle = (firstName?: string, lastName?: string): string => {
@@ -681,15 +493,6 @@ export default function AdminPage() {
     setCalendarYear(calendarYear + 1)
   }
 
-  // Recharger quand les filtres ou la recherche changent (CRM)
-  useEffect(() => {
-    if (authenticated) {
-      const timer = setTimeout(() => {
-        loadContacts()
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [crmSearchQuery, columnFilters.branch, sortField, sortDirection])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString + 'T00:00:00')
@@ -724,19 +527,6 @@ export default function AdminPage() {
     })
   }
 
-  const getSortIcon = (field: SortField) => {
-    const iconColor = theme === 'light' ? 'text-gray-900' : 'text-primary'
-    if (sortField !== field) {
-      return <ChevronDown className={`w-4 h-4 opacity-30 ${iconColor}`} />
-    }
-    if (sortDirection === 'asc') {
-      return <ChevronUp className={`w-4 h-4 ${iconColor}`} />
-    }
-    if (sortDirection === 'desc') {
-      return <ChevronDown className={`w-4 h-4 ${iconColor}`} />
-    }
-    return <ChevronDown className={`w-4 h-4 opacity-30 ${iconColor}`} />
-  }
 
   // Générer les jours de la semaine
   const getWeekDays = () => {
@@ -881,7 +671,10 @@ export default function AdminPage() {
     if (dateAppointments.length === 0) return []
 
     // Convertir en Bookings et trier par heure
-    const bookings: Booking[] = dateAppointments.map(toBooking).sort((a, b) => {
+    const bookings: Booking[] = dateAppointments.map(appointment => {
+      const booking = toBooking(appointment)
+      return booking
+    }).sort((a, b) => {
       const aStart = a.hour * 60 + a.minute
       const bStart = b.hour * 60 + b.minute
       return aStart - bStart
@@ -915,10 +708,11 @@ export default function AdminPage() {
 
       if (result.success && result.allocation) {
         // Mettre à jour le booking avec la nouvelle allocation
+        // IMPORTANT : Préserver explicitement tous les autres champs du booking original
         const updatedBooking: Booking = {
           ...booking,
           assignedSlots: result.allocation.slotAllocation?.slots,
-          assignedRoom: result.allocation.roomAllocation?.roomId
+          assignedRoom: result.allocation.roomAllocation?.roomId,
         }
         reorganizedBookings.push(updatedBooking)
       } else {
@@ -934,7 +728,8 @@ export default function AdminPage() {
     // Convertir en SimpleAppointment
     return reorganizedBookings.map(b => {
       const original = dateAppointments.find(a => a.id === b.id)
-      return fromBooking(b, original)
+      const result = fromBooking(b, original)
+      return result
     })
   }
 
@@ -1140,11 +935,8 @@ export default function AdminPage() {
     setAppointmentParticipants(null) // null = < 6 joueurs = 1 slot
     setAppointmentRoom(null)
     setUserChangedColor(false) // Réinitialiser le flag de couleur modifiée
-    // Réinitialiser le contact sélectionné
-    setSelectedContactId(null)
-    setShowContactSuggestions(false)
-    // Pour un nouveau rendez-vous, permettre l'édition du contact
-    setIsContactEditable(true)
+    setAppointmentCustomerEmail('')
+    setAppointmentCustomerNotes('')
     setShowAppointmentModal(true)
   }
 
@@ -1171,11 +963,6 @@ export default function AdminPage() {
     setAppointmentCustomerNotes(appointment.customerNotes || '')
     setAppointmentParticipants(appointment.participants ?? null)
     setAppointmentRoom(appointment.assignedRoom ?? null)
-    // Réinitialiser le contact sélectionné (on ne sait pas quel contact correspond à ce rendez-vous)
-    setSelectedContactId(null)
-    setShowContactSuggestions(false)
-    // Pour un rendez-vous existant, geler les champs client par défaut
-    setIsContactEditable(false)
     setShowAppointmentModal(true)
   }
 
@@ -1347,7 +1134,7 @@ export default function AdminPage() {
 
   // Fonction interne pour sauvegarder avec des slots spécifiques
   // DOIT être définie AVANT saveAppointment car elle est utilisée dans pendingSave
-  const saveAppointmentWithSlots = (slotsToUse: number[]) => {
+  const saveAppointmentWithSlots = async (slotsToUse: number[]) => {
     // Vérifier que prénom ou nom est rempli au lieu du titre
     if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
@@ -1458,6 +1245,7 @@ export default function AdminPage() {
       }
     }
 
+
     if (editingAppointment) {
       setAppointments(prev => {
         // Mettre à jour le rendez-vous modifié
@@ -1490,6 +1278,7 @@ export default function AdminPage() {
           assignedSlots: slotsToUse.length > 0 ? slotsToUse : undefined,
           assignedRoom: assignedRoom,
         }
+        
         
         // Mettre à jour tous les rendez-vous
         const updated = prev.map(a =>
@@ -1529,6 +1318,7 @@ export default function AdminPage() {
         assignedSlots: slotsToUse.length > 0 ? slotsToUse : undefined,
         assignedRoom: assignedRoom,
       }
+      
       
       setAppointments(prev => {
         // TOUJOURS utiliser compactSlots pour réorganiser tous les rendez-vous
@@ -1645,35 +1435,52 @@ export default function AdminPage() {
   }
 
   const saveAppointment = () => {
+    // PROTECTION : Éviter les appels récursifs infinis
+    if ((window as any).__savingAppointment) {
+      console.warn('saveAppointment déjà en cours, évitement de la récursion')
+      return
+    }
+    
     // Vérifier que prénom ou nom est rempli au lieu du titre
     if ((!appointmentCustomerFirstName?.trim() && !appointmentCustomerLastName?.trim()) || appointmentHour === null || !appointmentDate) {
       return
     }
-    const dateStr = appointmentDate
-
-    // RÈGLE NON NÉGOCIABLE : Convertir TOUS les appointments en Bookings
-    // Le scheduler va gérer la réorganisation complète
-    const existingBookings = appointments.map(toBooking)
-
-    // Préparer le nouveau booking à créer/modifier
-    // RÈGLE CRITIQUE : Seuls les EVENT (anniversaire avec eventType !== 'game') bloquent une room
-    // GAME (eventType === 'game' ou vide/null/undefined) = uniquement game-slots
-    const isEvent = appointmentEventType && appointmentEventType !== 'game' && appointmentEventType.trim() !== ''
-    const eventDurationMinutes = isEvent 
-      ? (appointmentDuration ?? 60)
-      : (appointmentGameDuration ?? 60)
     
-    // Vérifier si on a un flag confirmedSurbook (depuis popup)
-    const confirmedSurbook = (window as any).__pendingSurbookConfirmed === true
-    const confirmedRoomOvercap = (window as any).__pendingRoomOvercapConfirmed === true
-    if (confirmedSurbook) {
-      delete (window as any).__pendingSurbookConfirmed
-    }
-    if (confirmedRoomOvercap) {
-      delete (window as any).__pendingRoomOvercapConfirmed
-    }
+    // Marquer qu'on est en train de sauvegarder
+    ;(window as any).__savingAppointment = true
+    
+    try {
+      const dateStr = appointmentDate
 
-    const newBooking: Booking = {
+      // RÈGLE NON NÉGOCIABLE : Convertir TOUS les appointments en Bookings
+      // Le scheduler va gérer la réorganisation complète
+      const existingBookings = appointments.map(toBooking)
+
+      // Préparer le nouveau booking à créer/modifier
+      // RÈGLE CRITIQUE : Seuls les EVENT (anniversaire avec eventType !== 'game') bloquent une room
+      // GAME (eventType === 'game' ou vide/null/undefined) = uniquement game-slots
+      const isEvent = appointmentEventType && appointmentEventType !== 'game' && appointmentEventType.trim() !== ''
+      const eventDurationMinutes = isEvent 
+        ? (appointmentDuration ?? 60)
+        : (appointmentGameDuration ?? 60)
+      
+      // Vérifier si on a un flag confirmedSurbook (depuis popup)
+      // CRITIQUE : Nettoyer les flags AVANT de les utiliser pour éviter les états obsolètes
+      const confirmedSurbook = (window as any).__pendingSurbookConfirmed === true
+      const confirmedRoomOvercap = (window as any).__pendingRoomOvercapConfirmed === true
+      
+      // Nettoyer immédiatement après lecture pour éviter la réutilisation
+      if (confirmedSurbook) {
+        delete (window as any).__pendingSurbookConfirmed
+      }
+      if (confirmedRoomOvercap) {
+        delete (window as any).__pendingRoomOvercapConfirmed
+      }
+      
+      // CRITIQUE : Ne PAS réinitialiser overlapInfo et pendingSave ici car cela cause des re-renders infinis
+      // Les valeurs seront réinitialisées uniquement quand nécessaire (onChange, fermeture popup, succès de sauvegarde, etc.)
+
+      const newBooking: Booking = {
       id: editingAppointment?.id || `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: (isEvent ? 'event' : 'game') as 'game' | 'event',
       date: dateStr,
@@ -1690,147 +1497,126 @@ export default function AdminPage() {
       customerEmail: appointmentCustomerEmail?.trim() || undefined,
       customerNotes: appointmentCustomerNotes?.trim() || undefined,
       color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert (#22c55e) pour EVENT, bleu (#3b82f6) pour GAME
-    }
+      }
 
-    // RÈGLE NON NÉGOCIABLE : Le scheduler retourne TOUJOURS un nouvel état complet
-    // L'UI ne mute JAMAIS les appointments directement
-    const roomConfigs = toRoomConfigs(roomCapacities)
-    const result = reorganizeAllBookingsForDate(
-      existingBookings,
-      newBooking,
-      dateStr,
-      roomConfigs,
-      true, // allowSplit pour GAME
-      confirmedSurbook, // allowSurbook si confirmé
-      confirmedRoomOvercap // allowRoomOvercap si confirmé
-    )
+      // RÈGLE NON NÉGOCIABLE : Le scheduler retourne TOUJOURS un nouvel état complet
+      // L'UI ne mute JAMAIS les appointments directement
+      const roomConfigs = toRoomConfigs(roomCapacities)
+      const result = reorganizeAllBookingsForDate(
+        existingBookings,
+        newBooking,
+        dateStr,
+        roomConfigs,
+        true, // allowSplit pour GAME
+        confirmedSurbook, // allowSurbook si confirmé
+        confirmedRoomOvercap // allowRoomOvercap si confirmé
+      )
 
-    // Gérer le résultat
-    if (result.success) {
-      // SUCCÈS : Appliquer l'état complet retourné par le scheduler
-      // Convertir les bookings en SimpleAppointments
-      const newAppointments = result.bookings.map(b => {
-        const original = appointments.find(a => a.id === b.id)
-        return fromBooking(b, original)
-      })
-      
-      // RÈGLE : setAppointments() n'est appelé QUE sur status === success
-      setAppointments(newAppointments)
-
-      // Créer ou mettre à jour un contact CRM pour chaque rendez-vous (GAME ou EVENT)
-      // Dès qu'on a au moins un prénom OU un nom (pas besoin de téléphone)
-      const firstName = appointmentCustomerFirstName?.trim()
-      const lastName = appointmentCustomerLastName?.trim()
-      const phone = appointmentCustomerPhone?.trim()
-      const email = appointmentCustomerEmail?.trim()
-      const notes = appointmentCustomerNotes?.trim()
-      
-      if (firstName || lastName) {
-        // Si on a sélectionné un contact (via auto-complétion), on est en mode UPDATE
-        // Sinon, l'API cherchera par téléphone/email et mettra à jour si trouvé, créera sinon
-        const contactId = selectedContactId || null
-        
-        // Appel fire-and-forget, on ne bloque pas l'UI
-        fetch('/api/contacts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contactId: contactId, // Si défini, l'API mettra à jour ce contact
-            firstName: firstName || null,
-            lastName: lastName || null,
-            phone: phone || null,
-            email: email || null,
-            notes: notes || null,
-            branch: appointmentBranch || null,
-            source: 'admin_agenda',
-          }),
+      // Gérer le résultat
+      if (result.success) {
+        // SUCCÈS : Appliquer l'état complet retourné par le scheduler
+        // Convertir les bookings en SimpleAppointments
+        const newAppointments = result.bookings.map(b => {
+          const original = appointments.find(a => a.id === b.id)
+          return fromBooking(b, original)
         })
-          .then(() => {
-            // Recharger les contacts CRM pour que le nouveau contact apparaisse dans la liste
-            loadContacts()
-          })
-          .catch((err) => {
-            console.error('Error creating/updating contact from appointment:', err)
-          })
-      }
+        
+        // RÈGLE : setAppointments() n'est appelé QUE sur status === success
+        setAppointments(newAppointments)
 
-      // Fermer le modal
-      setShowAppointmentModal(false)
-      setEditingAppointment(null)
-      // Reset form...
-      setAppointmentCustomerFirstName('')
-      setAppointmentCustomerLastName('')
-      setAppointmentCustomerPhone('')
-      setAppointmentCustomerEmail('')
-      setAppointmentCustomerNotes('')
-      setAppointmentHour(null)
-      setAppointmentDate('')
-      setAppointmentParticipants(null)
-      setAppointmentEventType('')
-      setAppointmentGameDuration(60)
-      setAppointmentDuration(60)
-      setAppointmentColor('#3b82f6')
-      // Réinitialiser le contact sélectionné
-      setSelectedContactId(null)
-      setShowContactSuggestions(false)
-      // Re-geler les champs client après sauvegarde (protection)
-      setIsContactEditable(false)
-    } else if (result.conflict) {
-      // Gérer les conflits
-      // RÈGLE : En cas de NEED_SURBOOK_CONFIRM ou NEED_ROOM_OVERCAP_CONFIRM, AUCUN état n'est muté
-      // On affiche juste le popup, et si l'utilisateur accepte, on repasse par saveAppointment() avec le flag
-      
-      const canSurbook = result.conflict.type === 'NEED_SURBOOK_CONFIRM' || result.conflict.type === 'FULL'
-      
-      if (canSurbook || result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
-        // Afficher popup de confirmation (SANS MUTER L'ÉTAT)
-        if (canSurbook) {
-          setOverlapInfo({
-            slotsNeeded: result.conflict.details?.neededSlots || 0,
-            availableSlots: result.conflict.details?.availableSlots || 0,
-            maxParticipants: (result.conflict.details?.availableSlots || 0) * 6
-          })
-          setPendingSave(() => () => {
-            // Marquer que le surbook est confirmé
-            (window as any).__pendingSurbookConfirmed = true
+        // Fermer le modal
+        setShowAppointmentModal(false)
+        setEditingAppointment(null)
+        // Reset form...
+        setAppointmentCustomerFirstName('')
+        setAppointmentCustomerLastName('')
+        setAppointmentCustomerPhone('')
+        setAppointmentCustomerEmail('')
+        setAppointmentCustomerNotes('')
+        setAppointmentHour(null)
+        setAppointmentDate('')
+        setAppointmentParticipants(null)
+        setAppointmentEventType('')
+        setAppointmentGameDuration(60)
+        setAppointmentDuration(60)
+        setAppointmentColor('#3b82f6')
+        
+        // Réinitialiser les états de conflit
+        setShowOverlapConfirm(false)
+        setOverlapInfo(null)
+        setPendingSave(null)
+      } else if (result.conflict) {
+        // Gérer les conflits
+        // RÈGLE : En cas de NEED_SURBOOK_CONFIRM ou NEED_ROOM_OVERCAP_CONFIRM, AUCUN état n'est muté
+        // On affiche juste le popup, et si l'utilisateur accepte, on repasse par saveAppointment() avec le flag
+        
+        const canSurbook = result.conflict.type === 'NEED_SURBOOK_CONFIRM' || result.conflict.type === 'FULL'
+        
+        if (canSurbook || result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
+          // Afficher popup de confirmation (SANS MUTER L'ÉTAT)
+          if (canSurbook) {
+            // CRITIQUE : Toujours utiliser les valeurs ACTUELLES du conflit, jamais de valeurs en cache
+            // Lire les valeurs ACTUELLES du conflit (pas de cache)
+            const currentSlotsNeeded = result.conflict.details?.neededSlots || 0
+            const currentAvailableSlots = result.conflict.details?.availableSlots || 0
+            const currentMaxParticipants = currentAvailableSlots * 6
             
-            // Réessayer avec surbook autorisé en repassant par saveAppointment
-            // Cela garantit que le scheduler retourne un état complet
-            saveAppointment()
+            // Mettre à jour avec les valeurs actuelles (sans réinitialiser d'abord pour éviter les re-renders)
+            setOverlapInfo({
+              slotsNeeded: currentSlotsNeeded,
+              availableSlots: currentAvailableSlots,
+              maxParticipants: currentMaxParticipants
+            })
             
-            // Nettoyer le flag après un délai
-            setTimeout(() => {
+            // CRITIQUE : Créer une nouvelle fonction qui lit toujours les valeurs actuelles du state
+            // Ne pas capturer de valeurs dans la closure
+            setPendingSave(() => {
+              // S'assurer que les flags sont nettoyés avant de continuer
               delete (window as any).__pendingSurbookConfirmed
-            }, 1000)
-          })
-          setShowOverlapConfirm(true)
-        } else if (result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
-          setRoomCapacityInfo({
-            roomNumber: result.conflict.details?.roomId || 0,
-            roomName: `Salle ${result.conflict.details?.roomId || 0}`,
-            maxCapacity: result.conflict.details?.roomCapacity || 0,
-            participants: newBooking.participants
-          })
-          setPendingRoomSave(() => () => {
-            // Marquer que le room overcap est confirmé
-            (window as any).__pendingRoomOvercapConfirmed = true
-            
-            // Réessayer avec room overcap autorisé en repassant par saveAppointment
-            saveAppointment()
-            
-            // Nettoyer le flag après un délai
-            setTimeout(() => {
               delete (window as any).__pendingRoomOvercapConfirmed
-            }, 1000)
-          })
-          setShowRoomCapacityConfirm(true)
+              
+              // Marquer que le surbook est confirmé
+              ;(window as any).__pendingSurbookConfirmed = true
+              
+              // Réessayer avec surbook autorisé en repassant par saveAppointment
+              // Utiliser setTimeout pour éviter les appels récursifs synchrones
+              setTimeout(() => {
+                saveAppointment()
+              }, 0)
+            })
+            setShowOverlapConfirm(true)
+          } else if (result.conflict.type === 'NEED_ROOM_OVERCAP_CONFIRM') {
+            setRoomCapacityInfo({
+              roomNumber: result.conflict.details?.roomId || 0,
+              roomName: `Salle ${result.conflict.details?.roomId || 0}`,
+              maxCapacity: result.conflict.details?.roomCapacity || 0,
+              participants: newBooking.participants
+            })
+            setPendingRoomSave(() => {
+              // Marquer que le room overcap est confirmé
+              ;(window as any).__pendingRoomOvercapConfirmed = true
+              
+              // Réessayer avec room overcap autorisé en repassant par saveAppointment
+              // Utiliser setTimeout pour éviter les appels récursifs synchrones
+              setTimeout(() => {
+                saveAppointment()
+              }, 0)
+              
+              // Nettoyer le flag après un délai
+              setTimeout(() => {
+                delete (window as any).__pendingRoomOvercapConfirmed
+              }, 1000)
+            })
+            setShowRoomCapacityConfirm(true)
+          }
+        } else {
+          // Autres conflits : refuser (SANS MUTER L'ÉTAT)
+          alert(result.conflict.message)
         }
-      } else {
-        // Autres conflits : refuser (SANS MUTER L'ÉTAT)
-        alert(result.conflict.message)
       }
+    } finally {
+      // Toujours nettoyer le flag de sauvegarde en cours
+      delete (window as any).__savingAppointment
     }
   }
 
@@ -1994,9 +1780,9 @@ export default function AdminPage() {
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              Back Office - CRM
+              Back Office - Agenda
             </h1>
-            <p className={textSecondary + ' text-base'}>Gestion des contacts et clients</p>
+            <p className={textSecondary + ' text-base'}>Gestion des événements</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -2035,52 +1821,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Onglets Table/Agenda */}
-        <div className="mb-6 flex gap-2">
-          <button
-            onClick={() => setViewMode('table')}
-            className={`px-6 py-3 rounded-lg border transition-all flex items-center gap-2 ${
-              viewMode === 'table'
-                ? 'bg-primary/20 border-primary text-primary'
-                : `${bgCard} ${borderColor} ${textMain} hover:${bgCardHover}`
-            }`}
-          >
-            <Grid className="w-5 h-5" />
-            <span className="text-base font-medium">CRM</span>
-          </button>
-          <button
-            onClick={() => setViewMode('agenda')}
-            className={`px-6 py-3 rounded-lg border transition-all flex items-center gap-2 ${
-              viewMode === 'agenda'
-                ? 'bg-primary/20 border-primary text-primary'
-                : `${bgCard} ${borderColor} ${textMain} hover:${bgCardHover}`
-            }`}
-          >
-            <CalendarDays className="w-5 h-5" />
-            <span className="text-base font-medium">Agenda</span>
-          </button>
-        </div>
-
-        {/* Barre de recherche - CRM */}
-        {viewMode === 'table' && (
-          <div className={`${bgCard} backdrop-blur-sm rounded-2xl p-6 border ${borderColor} mb-6`}>
-            <div className="flex items-center gap-4">
-              <div className="flex-1 relative">
-                <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${textSecondary}`} />
-                <input
-                  type="text"
-                  value={crmSearchQuery}
-                  onChange={(e) => setCrmSearchQuery(e.target.value)}
-                  placeholder="Rechercher un contact (nom, téléphone, email, notes, branch, source)..."
-                  className={`w-full pl-10 pr-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textMain} text-base placeholder-gray-500 focus:border-primary/70 focus:outline-none`}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Barre de recherche - Agenda */}
-        {viewMode === 'agenda' && (() => {
+        {(() => {
           // Filtrer les appointments selon la recherche Agenda pour la liste de résultats
           const searchResults = agendaSearchQuery
             ? appointments.filter((a) => {
@@ -2201,30 +1943,8 @@ export default function AdminPage() {
           )
         })()}
 
-        {/* Statistiques CRM */}
-        {viewMode === 'table' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-              <div className={`${textSecondary} text-base mb-1`}>Total</div>
-              <div className={`text-3xl font-bold ${textPrimary}`}>{contacts.length}</div>
-            </div>
-            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-              <div className={`${textSecondary} text-base mb-1`}>Avec email</div>
-              <div className="text-3xl font-bold text-green-500">
-                {contacts.filter(c => c.email).length}
-              </div>
-            </div>
-            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-              <div className={`${textSecondary} text-base mb-1`}>Sans email</div>
-              <div className="text-3xl font-bold text-red-500">
-                {contacts.filter(c => !c.email).length}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Statistiques Agenda */}
-        {viewMode === 'agenda' && (() => {
+        {(() => {
           // Calculer les statistiques pour le jour sélectionné
           const year = selectedDate.getFullYear()
           const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
@@ -2333,156 +2053,9 @@ export default function AdminPage() {
           )
         })()}
 
-        {/* Erreur */}
-        {error && (
-          <div className={`mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-400 text-base`}>
-            {error}
-          </div>
-        )}
-
-        {/* Vue CRM (Tableau de contacts) */}
-        {viewMode === 'table' && (
-          <div className={`${bgCard} backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden`}>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className={`${bgHeader} border-b ${borderColor}`}>
-                  <tr>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('createdAt')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Créé le</span>
-                        {getSortIcon('createdAt')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('lastName')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Nom</span>
-                        {getSortIcon('lastName')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('phone')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Téléphone</span>
-                        {getSortIcon('phone')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('email')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Email</span>
-                        {getSortIcon('email')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => handleSort('branch')}
-                          className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                        >
-                          <span>Branch</span>
-                          {getSortIcon('branch')}
-                        </button>
-                        <select
-                          value={columnFilters.branch || 'all'}
-                          onChange={(e) => handleColumnFilter('branch', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-sm ${inputBg} border ${inputBorder} rounded px-2 py-1.5 ${textMain} focus:border-primary/50 focus:outline-none`}
-                        >
-                          <option value="all">Toutes</option>
-                          <option value="Rishon LeZion">Rishon</option>
-                          <option value="Petah Tikva">Petah Tikva</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('source')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Source</span>
-                        {getSortIcon('source')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <span className={`text-base font-bold ${textPrimary}`}>Notes</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={10} className={`px-4 py-12 text-center text-base ${textSecondary}`}>
-                        Chargement...
-                      </td>
-                    </tr>
-                  ) : contacts.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className={`px-4 py-12 text-center text-base ${textSecondary}`}>
-                        Aucun contact trouvé
-                      </td>
-                    </tr>
-                  ) : (
-                    contacts.map((contact) => (
-                      <tr
-                        key={contact.id}
-                        className={`border-b ${borderColor} hover:${bgCardHover} transition-colors`}
-                      >
-                        <td className="px-4 py-4">
-                          <div className={`text-base font-mono ${textSecondary} whitespace-nowrap`}>
-                            {new Date(contact.createdAt).toLocaleString('fr-FR')}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {((contact.firstName || '') + ' ' + (contact.lastName || '')).trim() || '-'}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {contact.phone}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {contact.email}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {contact.branch || '-'}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {contact.source}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-sm ${textSecondary} whitespace-pre-line max-w-xs`}>
-                            {contact.notes || ''}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
         {/* Vue Agenda */}
-        {viewMode === 'agenda' && (() => {
+        {(() => {
           // Filtrer les appointments selon la recherche Agenda
           const filteredAppointments = agendaSearchQuery
             ? appointments.filter((a) => {
@@ -3172,8 +2745,6 @@ export default function AdminPage() {
                     setAppointmentTitle('')
                     setAppointmentHour(null)
                     setAppointmentDate('')
-                    setSelectedContactId(null)
-                    setShowContactSuggestions(false)
                   }}
                 />
                 {/* Fenêtre pop-up indépendante, draggable */}
@@ -3291,6 +2862,9 @@ export default function AdminPage() {
                                 setShowOverlapConfirm(false)
                                 setOverlapInfo(null)
                                 setPendingSave(null)
+                                // CRITIQUE : Nettoyer les flags de confirmation pour éviter les états obsolètes
+                                delete (window as any).__pendingSurbookConfirmed
+                                delete (window as any).__pendingRoomOvercapConfirmed
                               }}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                             />
@@ -3313,6 +2887,9 @@ export default function AdminPage() {
                                 setShowOverlapConfirm(false)
                                 setOverlapInfo(null)
                                 setPendingSave(null)
+                                // CRITIQUE : Nettoyer les flags de confirmation pour éviter les états obsolètes
+                                delete (window as any).__pendingSurbookConfirmed
+                                delete (window as any).__pendingRoomOvercapConfirmed
                               }}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                             >
@@ -3384,36 +2961,6 @@ export default function AdminPage() {
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <h4 className={`text-base font-semibold ${textPrimary}`}>Informations client & jeu</h4>
-                          {editingAppointment && !isContactEditable && (
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsContactEditable(true)
-                                  setShowContactSuggestions(false)
-                                }}
-                                className={`px-3 py-1.5 text-xs rounded border ${borderColor} ${bgCard} ${textSecondary} hover:${bgCardHover} transition-all`}
-                              >
-                                Modifier le contact
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsContactEditable(true)
-                                  setSelectedContactId(null)
-                                  setAppointmentCustomerFirstName('')
-                                  setAppointmentCustomerLastName('')
-                                  setAppointmentCustomerPhone('')
-                                  setAppointmentCustomerEmail('')
-                                  setAppointmentCustomerNotes('')
-                                  setShowContactSuggestions(false)
-                                }}
-                                className={`px-3 py-1.5 text-xs rounded border ${borderColor} ${bgCard} ${textSecondary} hover:${bgCardHover} transition-all`}
-                              >
-                                Changer de contact
-                              </button>
-                            </div>
-                          )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -3424,12 +2971,8 @@ export default function AdminPage() {
                               onChange={(e) => {
                                 const value = e.target.value
                                 setAppointmentCustomerFirstName(value)
-                                if (isContactEditable) {
-                                  updateContactSuggestions(value)
-                                }
                               }}
-                              disabled={!isContactEditable}
-                              autoFocus={!editingAppointment && isContactEditable} // Auto-focus sur prénom pour nouveau événement
+                              autoFocus={!editingAppointment} // Auto-focus sur prénom pour nouveau événement
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
@@ -3441,11 +2984,7 @@ export default function AdminPage() {
                               onChange={(e) => {
                                 const value = e.target.value
                                 setAppointmentCustomerLastName(value)
-                                if (isContactEditable) {
-                                  updateContactSuggestions(value)
-                                }
                               }}
-                              disabled={!isContactEditable}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
@@ -3458,11 +2997,7 @@ export default function AdminPage() {
                               onChange={(e) => {
                                 const value = e.target.value
                                 setAppointmentCustomerPhone(value)
-                                if (isContactEditable) {
-                                  updateContactSuggestions(value)
-                                }
                               }}
-                              disabled={!isContactEditable}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
@@ -3474,14 +3009,11 @@ export default function AdminPage() {
                               onChange={(e) => {
                                 const value = e.target.value
                                 setAppointmentCustomerEmail(value)
-                                if (isContactEditable) {
-                                  updateContactSuggestions(value)
-                                }
                               }}
-                              disabled={!isContactEditable}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
+
 
                           <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -3510,51 +3042,15 @@ export default function AdminPage() {
                                   setShowOverlapConfirm(false)
                                   setOverlapInfo(null)
                                   setPendingSave(null)
+                                  // CRITIQUE : Nettoyer les flags de confirmation pour éviter les états obsolètes
+                                  delete (window as any).__pendingSurbookConfirmed
+                                  delete (window as any).__pendingRoomOvercapConfirmed
                                 }}
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                               />
                             </div>
                           </div>
                         </div>
-
-                        {/* Suggestions de contacts (CRM) - uniquement si édition activée */}
-                        {isContactEditable && showContactSuggestions && contactSuggestions.length > 0 && (
-                          <div className="mt-3 border border-primary/40 rounded-lg bg-black/40 max-h-60 overflow-y-auto text-sm">
-                            <div className="px-3 py-2 border-b border-primary/30 text-primary font-semibold">
-                              Sélectionner un contact existant
-                            </div>
-                            {contactSuggestions.map((contact) => (
-                              <button
-                                key={contact.id}
-                                type="button"
-                                onClick={() => handleSelectContact(contact)}
-                                className="w-full text-left px-3 py-2 hover:bg-primary/10 border-b border-white/5 last:border-b-0"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <div>
-                                    <div className={`font-semibold ${textPrimary}`}>
-                                      {(contact.firstName || '') + ' ' + (contact.lastName || '')}
-                                    </div>
-                                    <div className={`text-xs ${textSecondary}`}>
-                                      {contact.phone}
-                                      {contact.email ? ` • ${contact.email}` : ''}
-                                    </div>
-                                  </div>
-                                  {contact.branch && (
-                                    <span className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary">
-                                      {contact.branch}
-                                    </span>
-                                  )}
-                                </div>
-                                {contact.notes && (
-                                  <div className={`mt-1 text-[11px] ${textSecondary} line-clamp-2`}>
-                                    {contact.notes}
-                                  </div>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
 
                         <div className="mt-4">
                           <label className={`block text-sm mb-1 ${textSecondary}`}>
@@ -3563,7 +3059,6 @@ export default function AdminPage() {
                           <textarea
                             value={appointmentCustomerNotes}
                             onChange={(e) => setAppointmentCustomerNotes(e.target.value)}
-                            disabled={!isContactEditable}
                             rows={3}
                             className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             placeholder="Allergies, langage, demandes spéciales, etc."
@@ -3593,8 +3088,6 @@ export default function AdminPage() {
                             setAppointmentTitle('')
                             setAppointmentHour(null)
                             setAppointmentDate('')
-                            setSelectedContactId(null)
-                            setShowContactSuggestions(false)
                           }}
                           className={`px-4 py-2 rounded-lg border ${borderColor} text-sm ${textSecondary} hover:${bgCardHover} transition-all min-w-[120px]`}
                         >
@@ -3618,6 +3111,9 @@ export default function AdminPage() {
                           setShowOverlapConfirm(false)
                           setOverlapInfo(null)
                           setPendingSave(null)
+                          // CRITIQUE : Nettoyer les flags quand on ferme la popup
+                          delete (window as any).__pendingSurbookConfirmed
+                          delete (window as any).__pendingRoomOvercapConfirmed
                         }}
                       >
                         <div
@@ -3669,6 +3165,9 @@ export default function AdminPage() {
                                 setShowOverlapConfirm(false)
                                 setOverlapInfo(null)
                                 setPendingSave(null)
+                                // CRITIQUE : Nettoyer les flags quand on refuse
+                                delete (window as any).__pendingSurbookConfirmed
+                                delete (window as any).__pendingRoomOvercapConfirmed
                               }}
                               className={`px-4 py-2 rounded-lg border ${borderColor} text-sm ${textSecondary} hover:${bgCardHover} transition-all min-w-[120px]`}
                             >
@@ -3679,9 +3178,9 @@ export default function AdminPage() {
                                 if (pendingSave) {
                                   pendingSave()
                                 }
+                                // CRITIQUE : Ne pas nettoyer overlapInfo et pendingSave ici car pendingSave() va appeler saveAppointment()
+                                // qui va gérer la réinitialisation. Mais on ferme la popup immédiatement.
                                 setShowOverlapConfirm(false)
-                                setOverlapInfo(null)
-                                setPendingSave(null)
                               }}
                               className="px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-all min-w-[120px]"
                             >
