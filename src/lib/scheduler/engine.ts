@@ -809,12 +809,14 @@ export function reorganizeAllBookingsForDate(
         }
       } else {
         // Pas de place même après déplacement, essayer placeGameBooking directement avec allowSurbook
+        // IMPORTANT : Pour les événements, toujours permettre le surbooking si demandé
         // puis placer la room manuellement (comme dans placeEventBooking mais sans appeler placeEventBooking)
         const gameParams: AllocationParams = {
           ...params,
           gameDurationMinutes: 60, // Toujours 60 min centré pour EVENT
           type: 'game' // Traiter comme GAME pour l'allocation de slots
         }
+        // Pour les événements, permettre le surbooking si allowSurbook est true
         const gameResult = placeGameBooking(currentBookings, gameParams, false, allowSurbook)
         
         if (!gameResult.success) {

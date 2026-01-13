@@ -91,6 +91,9 @@ export interface Booking {
   // Métadonnées (pour affichage)
   customerFirstName?: string
   customerLastName?: string
+  customerPhone?: string
+  customerEmail?: string
+  customerNotes?: string
   color?: string
 }
 

@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import { Calendar, Clock, Users, MapPin, Phone, Mail, Search, Filter, X, Ban, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Grid, CalendarDays, Sun, Moon, Settings, Trash2 } from 'lucide-react'
 import { Reservation } from '@/lib/reservations'
 // Scheduler imports
-import { reorganizeAllBookingsForDate, validateNoOverlap, calculateSlotsNeeded } from '@/lib/scheduler/engine'
+import { reorganizeAllBookingsForDate, validateNoOverlap, calculateSlotsNeeded, placeEventBooking, placeGameBooking } from '@/lib/scheduler/engine'
 import { toRoomConfigs, toBooking, fromBooking } from '@/lib/scheduler/adapters'
 import type { Booking } from '@/lib/scheduler/types'
 import { requiresConfirmation, getConflictDetails } from '@/lib/scheduler/exceptions'
 
-type SortField = 'reservationNumber' | 'date' | 'time' | 'firstName' | 'lastName' | 'phone' | 'branch' | 'type' | 'players' | 'status'
+// Tri pour la vue CRM (contacts)
+type SortField = 'createdAt' | 'firstName' | 'lastName' | 'phone' | 'email' | 'branch' | 'source'
 type SortDirection = 'asc' | 'desc' | null
 type ViewMode = 'table' | 'agenda'
 type AgendaView = 'week' | 'day'
@@ -42,6 +43,19 @@ type SimpleAppointment = {
   roomOvercapParticipants?: number
 }
 
+// Type pour la vue CRM (contacts)
+type ContactRow = {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  phone: string
+  email: string | null
+  notes: string | null
+  branch: string | null
+  source: string
+  createdAt: string
+}
+
 export default function AdminPage() {
   // ===== CONFIGURATION FLEXIBLE =====
   // Modifiez ces valeurs pour ajouter/supprimer des slots ou des rooms
@@ -53,14 +67,21 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [theme, setTheme] = useState<Theme>('light')
-  const [reservations, setReservations] = useState<Reservation[]>([])
-  const [allReservations, setAllReservations] = useState<Reservation[]>([])
+  // Données CRM (contacts)
+  const [contacts, setContacts] = useState<ContactRow[]>([])
+  const [allContacts, setAllContacts] = useState<ContactRow[]>([])
+  const [contactSuggestions, setContactSuggestions] = useState<ContactRow[]>([])
+  const [showContactSuggestions, setShowContactSuggestions] = useState(false)
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
+  const [isContactEditable, setIsContactEditable] = useState(false) // Protection : champs client gelés par défaut
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [sortField, setSortField] = useState<SortField>('date')
+  const [crmSearchQuery, setCrmSearchQuery] = useState('') // Recherche dans le CRM (contacts)
+  const [agendaSearchQuery, setAgendaSearchQuery] = useState('') // Recherche dans l'Agenda (appointments)
+  const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  // Par défaut, ouvrir directement l'agenda
+  const [viewMode, setViewMode] = useState<ViewMode>('agenda')
   const [agendaView, setAgendaView] = useState<AgendaView>('day')
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const today = new Date()
@@ -80,14 +101,11 @@ export default function AdminPage() {
     monday.setHours(0, 0, 0, 0)
     return monday
   })
+  // Filtres pour la vue CRM (pour l'instant uniquement branch)
   const [columnFilters, setColumnFilters] = useState<{
-    status?: 'confirmed' | 'cancelled' | 'all'
     branch?: string
-    type?: 'game' | 'event' | 'all'
   }>({
-    status: 'all',
     branch: 'all',
-    type: 'all',
   })
   const [appointments, setAppointments] = useState<SimpleAppointment[]>([])
   const [showAppointmentModal, setShowAppointmentModal] = useState(false)
@@ -146,14 +164,14 @@ export default function AdminPage() {
   const [isDraggingModal, setIsDraggingModal] = useState(false)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
 
-  // Vérifier si déjà authentifié, charger thème + rendez-vous simples + config modal
+  // Vérifier si déjà authentifié, charger thème + rendez-vous simples + config modal + contacts CRM
   useEffect(() => {
     if (typeof window === 'undefined') return
     
     const auth = localStorage.getItem('admin_authenticated')
     if (auth === 'true') {
       setAuthenticated(true)
-      loadReservations()
+      loadContacts()
     }
     const savedTheme = localStorage.getItem('admin_theme') as Theme
     if (savedTheme) {
@@ -298,7 +316,7 @@ export default function AdminPage() {
       if (result.success) {
         setAuthenticated(true)
         localStorage.setItem('admin_authenticated', 'true')
-        loadReservations()
+        loadContacts()
       } else {
         alert(result.error || 'Mot de passe incorrect')
       }
@@ -310,8 +328,8 @@ export default function AdminPage() {
   const handleLogout = () => {
     setAuthenticated(false)
     localStorage.removeItem('admin_authenticated')
-    setReservations([])
-    setAllReservations([])
+    setContacts([])
+    setAllContacts([])
   }
 
   // Fonction pour vider tous les événements
@@ -362,91 +380,111 @@ export default function AdminPage() {
     }
   }
 
-  const loadReservations = async () => {
+  // Met à jour les suggestions de contacts à partir d'un fragment tapé (nom, téléphone, email...)
+  const updateContactSuggestions = (query: string) => {
+    const q = query.trim().toLowerCase()
+    if (!q || allContacts.length === 0) {
+      setContactSuggestions([])
+      setShowContactSuggestions(false)
+      setSelectedContactId(null)
+      return
+    }
+
+    const matches = allContacts
+      .filter((c) => {
+        return (
+          (c.firstName && c.firstName.toLowerCase().includes(q)) ||
+          (c.lastName && c.lastName.toLowerCase().includes(q)) ||
+          c.phone.toLowerCase().includes(q) ||
+          (c.email && c.email.toLowerCase().includes(q))
+        )
+      })
+      .slice(0, 10)
+
+    setContactSuggestions(matches)
+    setShowContactSuggestions(matches.length > 0)
+  }
+
+  // Quand on choisit un contact dans la liste, on remplit les champs client
+  const handleSelectContact = (contact: ContactRow) => {
+    setSelectedContactId(contact.id)
+    setAppointmentCustomerFirstName(contact.firstName || '')
+    setAppointmentCustomerLastName(contact.lastName || '')
+    setAppointmentCustomerPhone(contact.phone)
+    setAppointmentCustomerEmail(contact.email || '')
+    setAppointmentCustomerNotes(contact.notes || '')
+    setShowContactSuggestions(false)
+    // Re-geler les champs après sélection (protection)
+    setIsContactEditable(false)
+  }
+
+  // Charger les contacts CRM
+  const loadContacts = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/reservations')
+      const response = await fetch('/api/contacts')
       const result = await response.json()
       
       if (result.success) {
-        setAllReservations(result.reservations)
-        
-        let filtered = result.reservations
-        
-        // Filtre par statut
-        if (columnFilters.status && columnFilters.status !== 'all') {
-          filtered = filtered.filter((r: Reservation) => r.status === columnFilters.status)
-        }
-        
+        const list: ContactRow[] = result.contacts || []
+        setAllContacts(list)
+
+        let filtered = list
+
         // Filtre par branch
         if (columnFilters.branch && columnFilters.branch !== 'all') {
-          filtered = filtered.filter((r: Reservation) => r.branch === columnFilters.branch)
+          filtered = filtered.filter((c: ContactRow) => c.branch === columnFilters.branch)
         }
-        
-        // Filtre par type
-        if (columnFilters.type && columnFilters.type !== 'all') {
-          filtered = filtered.filter((r: Reservation) => r.type === columnFilters.type)
-        }
-        
-        // Recherche
-        if (searchQuery) {
-          const searchLower = searchQuery.toLowerCase()
-          filtered = filtered.filter((r: Reservation) => 
-            r.firstName.toLowerCase().includes(searchLower) ||
-            r.lastName.toLowerCase().includes(searchLower) ||
-            r.phone.includes(searchLower) ||
-            (r.email && r.email.toLowerCase().includes(searchLower)) ||
-            r.reservationNumber.toLowerCase().includes(searchLower)
+
+        // Recherche texte (CRM uniquement)
+        if (crmSearchQuery) {
+          const searchLower = crmSearchQuery.toLowerCase()
+          filtered = filtered.filter((c: ContactRow) => 
+            (c.firstName && c.firstName.toLowerCase().includes(searchLower)) ||
+            (c.lastName && c.lastName.toLowerCase().includes(searchLower)) ||
+            c.phone.toLowerCase().includes(searchLower) ||
+            (c.email && c.email.toLowerCase().includes(searchLower)) ||
+            (c.notes && c.notes.toLowerCase().includes(searchLower)) ||
+            (c.branch && c.branch.toLowerCase().includes(searchLower)) ||
+            (c.source && c.source.toLowerCase().includes(searchLower))
           )
         }
-        
+
         // Tri
         if (sortField && sortDirection) {
-          filtered.sort((a: Reservation, b: Reservation) => {
+          filtered.sort((a: ContactRow, b: ContactRow) => {
             let aVal: any
             let bVal: any
             
             switch (sortField) {
-              case 'date':
-                aVal = new Date(a.date + 'T00:00:00').getTime()
-                bVal = new Date(b.date + 'T00:00:00').getTime()
-                break
-              case 'time':
-                aVal = a.time
-                bVal = b.time
+              case 'createdAt':
+                aVal = new Date(a.createdAt).getTime()
+                bVal = new Date(b.createdAt).getTime()
                 break
               case 'firstName':
-                aVal = a.firstName.toLowerCase()
-                bVal = b.firstName.toLowerCase()
+                aVal = (a.firstName || '').toLowerCase()
+                bVal = (b.firstName || '').toLowerCase()
                 break
               case 'lastName':
-                aVal = a.lastName.toLowerCase()
-                bVal = b.lastName.toLowerCase()
+                aVal = (a.lastName || '').toLowerCase()
+                bVal = (b.lastName || '').toLowerCase()
                 break
               case 'phone':
                 aVal = a.phone
                 bVal = b.phone
                 break
+              case 'email':
+                aVal = (a.email || '').toLowerCase()
+                bVal = (b.email || '').toLowerCase()
+                break
               case 'branch':
-                aVal = a.branch
-                bVal = b.branch
+                aVal = (a.branch || '').toLowerCase()
+                bVal = (b.branch || '').toLowerCase()
                 break
-              case 'type':
-                aVal = a.type
-                bVal = b.type
-                break
-              case 'players':
-                aVal = a.players
-                bVal = b.players
-                break
-              case 'status':
-                aVal = a.status
-                bVal = b.status
-                break
-              case 'reservationNumber':
-                aVal = a.reservationNumber
-                bVal = b.reservationNumber
+              case 'source':
+                aVal = (a.source || '').toLowerCase()
+                bVal = (b.source || '').toLowerCase()
                 break
               default:
                 return 0
@@ -457,41 +495,15 @@ export default function AdminPage() {
             return 0
           })
         }
-        
-        setReservations(filtered)
+
+        setContacts(filtered)
       } else {
-        setError(result.error || 'Erreur lors du chargement des réservations')
+        setError(result.error || 'Erreur lors du chargement des contacts')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors du chargement')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleCancelReservation = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir annuler cette réservation ?')) {
-      return
-    }
-
-    try {
-      const response = await fetch(`/api/reservations/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'cancelled' }),
-      })
-
-      const result = await response.json()
-      
-      if (result.success) {
-        loadReservations()
-      } else {
-        alert('Erreur lors de l\'annulation')
-      }
-    } catch (err) {
-      alert('Erreur lors de l\'annulation')
     }
   }
 
@@ -501,7 +513,7 @@ export default function AdminPage() {
         setSortDirection('desc')
       } else if (sortDirection === 'desc') {
         setSortDirection(null)
-        setSortField('date')
+        setSortField('createdAt')
         setSortDirection('desc')
       } else {
         setSortDirection('asc')
@@ -512,7 +524,7 @@ export default function AdminPage() {
     }
   }
 
-  const handleColumnFilter = (field: 'status' | 'branch' | 'type', value: string) => {
+  const handleColumnFilter = (field: 'branch', value: string) => {
     setColumnFilters({ ...columnFilters, [field]: value })
   }
 
@@ -669,15 +681,15 @@ export default function AdminPage() {
     setCalendarYear(calendarYear + 1)
   }
 
-  // Recharger quand les filtres ou la recherche changent
+  // Recharger quand les filtres ou la recherche changent (CRM)
   useEffect(() => {
     if (authenticated) {
       const timer = setTimeout(() => {
-        loadReservations()
+        loadContacts()
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [searchQuery, columnFilters.status, columnFilters.branch, columnFilters.type, sortField, sortDirection])
+  }, [crmSearchQuery, columnFilters.branch, sortField, sortDirection])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString + 'T00:00:00')
@@ -1128,6 +1140,11 @@ export default function AdminPage() {
     setAppointmentParticipants(null) // null = < 6 joueurs = 1 slot
     setAppointmentRoom(null)
     setUserChangedColor(false) // Réinitialiser le flag de couleur modifiée
+    // Réinitialiser le contact sélectionné
+    setSelectedContactId(null)
+    setShowContactSuggestions(false)
+    // Pour un nouveau rendez-vous, permettre l'édition du contact
+    setIsContactEditable(true)
     setShowAppointmentModal(true)
   }
 
@@ -1154,6 +1171,11 @@ export default function AdminPage() {
     setAppointmentCustomerNotes(appointment.customerNotes || '')
     setAppointmentParticipants(appointment.participants ?? null)
     setAppointmentRoom(appointment.assignedRoom ?? null)
+    // Réinitialiser le contact sélectionné (on ne sait pas quel contact correspond à ce rendez-vous)
+    setSelectedContactId(null)
+    setShowContactSuggestions(false)
+    // Pour un rendez-vous existant, geler les champs client par défaut
+    setIsContactEditable(false)
     setShowAppointmentModal(true)
   }
 
@@ -1451,7 +1473,7 @@ export default function AdminPage() {
           durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
             ? (appointmentDuration ?? undefined) 
             : undefined,
-          color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert pour EVENT, bleu pour GAME
+          color: appointmentColor || ((appointmentEventType && appointmentEventType !== 'game') ? '#22c55e' : '#3b82f6'), // Vert pour EVENT, bleu pour GAME
           eventNotes: appointmentEventNotes || undefined,
           customerFirstName: appointmentCustomerFirstName || undefined,
           customerLastName: appointmentCustomerLastName || undefined,
@@ -1494,7 +1516,7 @@ export default function AdminPage() {
         durationMinutes: (appointmentEventType && appointmentEventType !== 'game') 
           ? (appointmentDuration ?? undefined) 
           : undefined,
-          color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert pour EVENT, bleu pour GAME
+          color: appointmentColor || ((appointmentEventType && appointmentEventType !== 'game') ? '#22c55e' : '#3b82f6'), // Vert pour EVENT, bleu pour GAME
           eventNotes: appointmentEventNotes || undefined,
         customerFirstName: appointmentCustomerFirstName || undefined,
         customerLastName: appointmentCustomerLastName || undefined,
@@ -1662,8 +1684,11 @@ export default function AdminPage() {
       gameDurationMinutes: isEvent 
         ? 60 // Pour EVENT, jeu toujours 60 min centré
         : (appointmentGameDuration ?? 60),
-      customerFirstName: appointmentCustomerFirstName || undefined,
-      customerLastName: appointmentCustomerLastName || undefined,
+      customerFirstName: appointmentCustomerFirstName?.trim() || undefined,
+      customerLastName: appointmentCustomerLastName?.trim() || undefined,
+      customerPhone: appointmentCustomerPhone?.trim() || undefined,
+      customerEmail: appointmentCustomerEmail?.trim() || undefined,
+      customerNotes: appointmentCustomerNotes?.trim() || undefined,
       color: appointmentColor || (isEvent ? '#22c55e' : '#3b82f6'), // Vert (#22c55e) pour EVENT, bleu (#3b82f6) pour GAME
     }
 
@@ -1692,12 +1717,54 @@ export default function AdminPage() {
       // RÈGLE : setAppointments() n'est appelé QUE sur status === success
       setAppointments(newAppointments)
 
+      // Créer ou mettre à jour un contact CRM pour chaque rendez-vous (GAME ou EVENT)
+      // Dès qu'on a au moins un prénom OU un nom (pas besoin de téléphone)
+      const firstName = appointmentCustomerFirstName?.trim()
+      const lastName = appointmentCustomerLastName?.trim()
+      const phone = appointmentCustomerPhone?.trim()
+      const email = appointmentCustomerEmail?.trim()
+      const notes = appointmentCustomerNotes?.trim()
+      
+      if (firstName || lastName) {
+        // Si on a sélectionné un contact (via auto-complétion), on est en mode UPDATE
+        // Sinon, l'API cherchera par téléphone/email et mettra à jour si trouvé, créera sinon
+        const contactId = selectedContactId || null
+        
+        // Appel fire-and-forget, on ne bloque pas l'UI
+        fetch('/api/contacts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contactId: contactId, // Si défini, l'API mettra à jour ce contact
+            firstName: firstName || null,
+            lastName: lastName || null,
+            phone: phone || null,
+            email: email || null,
+            notes: notes || null,
+            branch: appointmentBranch || null,
+            source: 'admin_agenda',
+          }),
+        })
+          .then(() => {
+            // Recharger les contacts CRM pour que le nouveau contact apparaisse dans la liste
+            loadContacts()
+          })
+          .catch((err) => {
+            console.error('Error creating/updating contact from appointment:', err)
+          })
+      }
+
       // Fermer le modal
       setShowAppointmentModal(false)
       setEditingAppointment(null)
       // Reset form...
       setAppointmentCustomerFirstName('')
       setAppointmentCustomerLastName('')
+      setAppointmentCustomerPhone('')
+      setAppointmentCustomerEmail('')
+      setAppointmentCustomerNotes('')
       setAppointmentHour(null)
       setAppointmentDate('')
       setAppointmentParticipants(null)
@@ -1705,6 +1772,11 @@ export default function AdminPage() {
       setAppointmentGameDuration(60)
       setAppointmentDuration(60)
       setAppointmentColor('#3b82f6')
+      // Réinitialiser le contact sélectionné
+      setSelectedContactId(null)
+      setShowContactSuggestions(false)
+      // Re-geler les champs client après sauvegarde (protection)
+      setIsContactEditable(false)
     } else if (result.conflict) {
       // Gérer les conflits
       // RÈGLE : En cas de NEED_SURBOOK_CONFIRM ou NEED_ROOM_OVERCAP_CONFIRM, AUCUN état n'est muté
@@ -1922,9 +1994,9 @@ export default function AdminPage() {
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-              Back Office - Réservations
+              Back Office - CRM
             </h1>
-            <p className={textSecondary + ' text-base'}>Gestion des réservations</p>
+            <p className={textSecondary + ' text-base'}>Gestion des contacts et clients</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -1974,7 +2046,7 @@ export default function AdminPage() {
             }`}
           >
             <Grid className="w-5 h-5" />
-            <span className="text-base font-medium">Tableau</span>
+            <span className="text-base font-medium">CRM</span>
           </button>
           <button
             onClick={() => setViewMode('agenda')}
@@ -1989,41 +2061,277 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Barre de recherche */}
-        <div className={`${bgCard} backdrop-blur-sm rounded-2xl p-6 border ${borderColor} mb-6`}>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${textSecondary}`} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher par nom, téléphone, email, numéro de réservation..."
-                className={`w-full pl-10 pr-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textMain} text-base placeholder-gray-500 focus:border-primary/70 focus:outline-none`}
-              />
+        {/* Barre de recherche - CRM */}
+        {viewMode === 'table' && (
+          <div className={`${bgCard} backdrop-blur-sm rounded-2xl p-6 border ${borderColor} mb-6`}>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${textSecondary}`} />
+                <input
+                  type="text"
+                  value={crmSearchQuery}
+                  onChange={(e) => setCrmSearchQuery(e.target.value)}
+                  placeholder="Rechercher un contact (nom, téléphone, email, notes, branch, source)..."
+                  className={`w-full pl-10 pr-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textMain} text-base placeholder-gray-500 focus:border-primary/70 focus:outline-none`}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Statistiques */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-            <div className={`${textSecondary} text-base mb-1`}>Total</div>
-            <div className={`text-3xl font-bold ${textPrimary}`}>{reservations.length}</div>
-          </div>
-          <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-            <div className={`${textSecondary} text-base mb-1`}>Confirmées</div>
-            <div className="text-3xl font-bold text-green-500">
-              {reservations.filter(r => r.status === 'confirmed').length}
+        {/* Barre de recherche - Agenda */}
+        {viewMode === 'agenda' && (() => {
+          // Filtrer les appointments selon la recherche Agenda pour la liste de résultats
+          const searchResults = agendaSearchQuery
+            ? appointments.filter((a) => {
+                const searchLower = agendaSearchQuery.toLowerCase()
+                const customerName = `${a.customerFirstName || ''} ${a.customerLastName || ''}`.toLowerCase().trim()
+                const dateStr = a.date
+                const timeStr = `${String(a.hour).padStart(2, '0')}:${String(a.minute || 0).padStart(2, '0')}`
+                const title = (a.title || '').toLowerCase()
+                const eventNotes = (a.eventNotes || '').toLowerCase()
+                const customerNotes = (a.customerNotes || '').toLowerCase()
+                const customerPhone = (a.customerPhone || '').toLowerCase()
+                const customerEmail = (a.customerEmail || '').toLowerCase()
+                const branch = (a.branch || '').toLowerCase()
+                
+                return (
+                  customerName.includes(searchLower) ||
+                  dateStr.includes(searchLower) ||
+                  timeStr.includes(searchLower) ||
+                  title.includes(searchLower) ||
+                  eventNotes.includes(searchLower) ||
+                  customerNotes.includes(searchLower) ||
+                  customerPhone.includes(searchLower) ||
+                  customerEmail.includes(searchLower) ||
+                  branch.includes(searchLower) ||
+                  a.id.toLowerCase().includes(searchLower)
+                )
+              })
+            : []
+
+          return (
+            <div className={`${bgCard} backdrop-blur-sm rounded-2xl p-6 border ${borderColor} mb-6`}>
+              <div className="flex items-start gap-4">
+                <div className="flex-1 relative">
+                  <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${textSecondary}`} />
+                  <input
+                    type="text"
+                    value={agendaSearchQuery}
+                    onChange={(e) => setAgendaSearchQuery(e.target.value)}
+                    placeholder="Rechercher un rendez-vous (nom client, date, heure, référence)..."
+                    className={`w-full pl-10 pr-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textMain} text-base placeholder-gray-500 focus:border-primary/70 focus:outline-none`}
+                  />
+                </div>
+                
+                {/* Liste des résultats de recherche */}
+                {agendaSearchQuery && searchResults.length > 0 && (
+                  <div className={`w-96 ${bgCard} border ${borderColor} rounded-lg shadow-xl max-h-96 overflow-y-auto`}>
+                    <div className={`px-3 py-2 border-b ${borderColor} ${textPrimary} font-semibold text-sm`}>
+                      {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''} trouvé{searchResults.length > 1 ? 's' : ''}
+                    </div>
+                    <div className="divide-y divide-gray-700">
+                      {searchResults.map((appointment) => {
+                        const appointmentDate = new Date(appointment.date + 'T00:00:00')
+                        const dateFormatted = appointmentDate.toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                        const timeFormatted = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
+                        const customerName = `${appointment.customerFirstName || ''} ${appointment.customerLastName || ''}`.trim() || 'Sans nom'
+                        
+                        return (
+                          <button
+                            key={appointment.id}
+                            type="button"
+                            onClick={() => {
+                              // Aller à la date de ce rendez-vous
+                              setSelectedDate(appointmentDate)
+                              // Mettre à jour la semaine si nécessaire
+                              const day = appointmentDate.getDay()
+                              const diff = appointmentDate.getDate() - day + (day === 0 ? -6 : 1)
+                              const monday = new Date(appointmentDate)
+                              monday.setDate(diff)
+                              monday.setHours(0, 0, 0, 0)
+                              setCurrentWeekStart(monday)
+                              // Ouvrir le modal d'édition
+                              openEditAppointmentModal(appointment)
+                              // Effacer la recherche pour voir l'événement dans l'agenda
+                              setAgendaSearchQuery('')
+                            }}
+                            className={`w-full text-left px-3 py-2 hover:${bgCardHover} transition-colors`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className={`font-semibold ${textPrimary} truncate`}>
+                                  {customerName}
+                                </div>
+                                <div className={`text-xs ${textSecondary} mt-0.5`}>
+                                  {dateFormatted} à {timeFormatted}
+                                </div>
+                                {appointment.branch && (
+                                  <div className={`text-xs ${textSecondary} mt-0.5`}>
+                                    {appointment.branch}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-shrink-0">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: appointment.color || '#3b82f6' }}
+                                />
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Message si aucun résultat */}
+                {agendaSearchQuery && searchResults.length === 0 && (
+                  <div className={`w-96 ${bgCard} border ${borderColor} rounded-lg shadow-xl px-4 py-3 ${textSecondary} text-sm`}>
+                    Aucun rendez-vous trouvé
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Statistiques CRM */}
+        {viewMode === 'table' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+              <div className={`${textSecondary} text-base mb-1`}>Total</div>
+              <div className={`text-3xl font-bold ${textPrimary}`}>{contacts.length}</div>
+            </div>
+            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+              <div className={`${textSecondary} text-base mb-1`}>Avec email</div>
+              <div className="text-3xl font-bold text-green-500">
+                {contacts.filter(c => c.email).length}
+              </div>
+            </div>
+            <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+              <div className={`${textSecondary} text-base mb-1`}>Sans email</div>
+              <div className="text-3xl font-bold text-red-500">
+                {contacts.filter(c => !c.email).length}
+              </div>
             </div>
           </div>
-          <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
-            <div className={`${textSecondary} text-base mb-1`}>Annulées</div>
-            <div className="text-3xl font-bold text-red-500">
-              {reservations.filter(r => r.status === 'cancelled').length}
+        )}
+
+        {/* Statistiques Agenda */}
+        {viewMode === 'agenda' && (() => {
+          // Calculer les statistiques pour le jour sélectionné
+          const year = selectedDate.getFullYear()
+          const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
+          const day = String(selectedDate.getDate()).padStart(2, '0')
+          const dateStr = `${year}-${month}-${day}`
+          
+          const dayAppointments = appointments.filter(a => a.date === dateStr)
+          const withRoom = dayAppointments.filter(a => a.assignedRoom !== undefined && a.assignedRoom !== null)
+          const withoutRoom = dayAppointments.filter(a => !a.assignedRoom || a.assignedRoom === null)
+          const totalParticipants = dayAppointments.reduce((sum, a) => sum + (a.participants || 0), 0)
+          
+          // Calculer les statistiques pour le mois entier
+          const monthStart = new Date(year, selectedDate.getMonth(), 1)
+          const monthEnd = new Date(year, selectedDate.getMonth() + 1, 0)
+          const monthAppointments = appointments.filter(a => {
+            const appDate = new Date(a.date + 'T00:00:00')
+            return appDate >= monthStart && appDate <= monthEnd
+          })
+          const monthTotalParticipants = monthAppointments.reduce((sum, a) => sum + (a.participants || 0), 0)
+          const monthWithRoom = monthAppointments.filter(a => a.assignedRoom !== undefined && a.assignedRoom !== null).length
+          const monthWithoutRoom = monthAppointments.filter(a => !a.assignedRoom || a.assignedRoom === null).length
+          
+          // Calculer le début et la fin de la semaine (lundi à dimanche) pour la date sélectionnée
+          const dayOfWeek = selectedDate.getDay()
+          const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Si dimanche (0), aller au lundi précédent (-6), sinon aller au lundi de cette semaine
+          const weekStart = new Date(selectedDate)
+          weekStart.setDate(selectedDate.getDate() + diffToMonday)
+          weekStart.setHours(0, 0, 0, 0)
+          const weekEnd = new Date(weekStart)
+          weekEnd.setDate(weekStart.getDate() + 6)
+          weekEnd.setHours(23, 59, 59, 999)
+          
+          // Filtrer les appointments de la semaine
+          const weekAppointments = appointments.filter(a => {
+            const appDate = new Date(a.date + 'T00:00:00')
+            return appDate >= weekStart && appDate <= weekEnd
+          })
+          const weekTotalParticipants = weekAppointments.reduce((sum, a) => sum + (a.participants || 0), 0)
+          const weekWithRoom = weekAppointments.filter(a => a.assignedRoom !== undefined && a.assignedRoom !== null).length
+          const weekWithoutRoom = weekAppointments.filter(a => !a.assignedRoom || a.assignedRoom === null).length
+          
+          // Formater la période de la semaine
+          const weekStartStr = weekStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+          const weekEndStr = weekEnd.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+          
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+                <div className={`${textSecondary} text-base mb-2`}>
+                  {selectedDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Avec salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{withRoom.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Sans salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{withoutRoom.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+                    <span className={`${textSecondary} text-sm font-semibold`}>Total personnes:</span>
+                    <span className={`text-2xl font-bold text-primary`}>{totalParticipants}</span>
+                  </div>
+                </div>
+              </div>
+              <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+                <div className={`${textSecondary} text-base mb-2`}>
+                  Semaine ({weekStartStr} - {weekEndStr})
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Avec salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{weekWithRoom}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Sans salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{weekWithoutRoom}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+                    <span className={`${textSecondary} text-sm font-semibold`}>Total personnes:</span>
+                    <span className={`text-2xl font-bold text-primary`}>{weekTotalParticipants}</span>
+                  </div>
+                </div>
+              </div>
+              <div className={`${bgCard} backdrop-blur-sm rounded-xl p-4 border ${borderColor}`}>
+                <div className={`${textSecondary} text-base mb-2`}>
+                  Mois ({selectedDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })})
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Avec salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{monthWithRoom}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`${textSecondary} text-sm`}>Sans salle:</span>
+                    <span className={`text-lg font-semibold ${textPrimary}`}>{monthWithoutRoom}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+                    <span className={`${textSecondary} text-sm font-semibold`}>Total personnes:</span>
+                    <span className={`text-2xl font-bold text-primary`}>{monthTotalParticipants}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* Erreur */}
         {error && (
@@ -2032,7 +2340,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Vue Tableau */}
+        {/* Vue CRM (Tableau de contacts) */}
         {viewMode === 'table' && (
           <div className={`${bgCard} backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden`}>
             <div className="overflow-x-auto">
@@ -2041,29 +2349,11 @@ export default function AdminPage() {
                   <tr>
                     <th className="px-4 py-4 text-left">
                       <button
-                        onClick={() => handleSort('reservationNumber')}
+                        onClick={() => handleSort('createdAt')}
                         className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
                       >
-                        <span>Numéro</span>
-                        {getSortIcon('reservationNumber')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('date')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Date</span>
-                        {getSortIcon('date')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-4 text-left">
-                      <button
-                        onClick={() => handleSort('time')}
-                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                      >
-                        <span>Heure</span>
-                        {getSortIcon('time')}
+                        <span>Créé le</span>
+                        {getSortIcon('createdAt')}
                       </button>
                     </th>
                     <th className="px-4 py-4 text-left">
@@ -2071,7 +2361,7 @@ export default function AdminPage() {
                         onClick={() => handleSort('lastName')}
                         className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
                       >
-                        <span>Client</span>
+                        <span>Nom</span>
                         {getSortIcon('lastName')}
                       </button>
                     </th>
@@ -2082,6 +2372,15 @@ export default function AdminPage() {
                       >
                         <span>Téléphone</span>
                         {getSortIcon('phone')}
+                      </button>
+                    </th>
+                    <th className="px-4 py-4 text-left">
+                      <button
+                        onClick={() => handleSort('email')}
+                        className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
+                      >
+                        <span>Email</span>
+                        {getSortIcon('email')}
                       </button>
                     </th>
                     <th className="px-4 py-4 text-left">
@@ -2106,58 +2405,16 @@ export default function AdminPage() {
                       </div>
                     </th>
                     <th className="px-4 py-4 text-left">
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => handleSort('type')}
-                          className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                        >
-                          <span>Type</span>
-                          {getSortIcon('type')}
-                        </button>
-                        <select
-                          value={columnFilters.type || 'all'}
-                          onChange={(e) => handleColumnFilter('type', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-sm ${inputBg} border ${inputBorder} rounded px-2 py-1.5 ${textMain} focus:border-primary/50 focus:outline-none`}
-                        >
-                          <option value="all">Tous</option>
-                          <option value="game">Game</option>
-                          <option value="event">Event</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th className="px-4 py-4 text-left">
                       <button
-                        onClick={() => handleSort('players')}
+                        onClick={() => handleSort('source')}
                         className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
                       >
-                        <span>Participants</span>
-                        {getSortIcon('players')}
+                        <span>Source</span>
+                        {getSortIcon('source')}
                       </button>
                     </th>
                     <th className="px-4 py-4 text-left">
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => handleSort('status')}
-                          className={`flex items-center gap-2 text-base font-bold ${textPrimary} hover:opacity-80 transition-colors`}
-                        >
-                          <span>Statut</span>
-                          {getSortIcon('status')}
-                        </button>
-                        <select
-                          value={columnFilters.status || 'all'}
-                          onChange={(e) => handleColumnFilter('status', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-sm ${inputBg} border ${inputBorder} rounded px-2 py-1.5 ${textMain} focus:border-primary/50 focus:outline-none`}
-                        >
-                          <option value="all">Tous</option>
-                          <option value="confirmed">Confirmées</option>
-                          <option value="cancelled">Annulées</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th className={`px-4 py-4 text-left text-base font-bold ${textPrimary}`}>
-                      Actions
+                      <span className={`text-base font-bold ${textPrimary}`}>Notes</span>
                     </th>
                   </tr>
                 </thead>
@@ -2168,90 +2425,52 @@ export default function AdminPage() {
                         Chargement...
                       </td>
                     </tr>
-                  ) : reservations.length === 0 ? (
+                  ) : contacts.length === 0 ? (
                     <tr>
                       <td colSpan={10} className={`px-4 py-12 text-center text-base ${textSecondary}`}>
-                        Aucune réservation trouvée
+                        Aucun contact trouvé
                       </td>
                     </tr>
                   ) : (
-                    reservations.map((reservation) => (
+                    contacts.map((contact) => (
                       <tr
-                        key={reservation.id}
+                        key={contact.id}
                         className={`border-b ${borderColor} hover:${bgCardHover} transition-colors`}
                       >
                         <td className="px-4 py-4">
                           <div className={`text-base font-mono ${textSecondary} whitespace-nowrap`}>
-                            {reservation.reservationNumber}
+                            {new Date(contact.createdAt).toLocaleString('fr-FR')}
                           </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {formatDate(reservation.date)}
+                            {((contact.firstName || '') + ' ' + (contact.lastName || '')).trim() || '-'}
                           </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {reservation.time}
+                            {contact.phone}
                           </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {reservation.firstName} {reservation.lastName}
-                          </div>
-                          {reservation.email && (
-                            <div className={`text-sm ${textSecondary} mt-1`}>
-                              {reservation.email}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {reservation.phone}
+                            {contact.email}
                           </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {reservation.branch}
+                            {contact.branch || '-'}
                           </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span
-                            className={`inline-block px-3 py-1.5 rounded text-sm font-bold whitespace-nowrap ${
-                              reservation.type === 'game'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-purple-500/20 text-purple-400'
-                            }`}
-                          >
-                            {reservation.type === 'game' ? 'GAME' : 'EVENT'}
-                          </span>
                         </td>
                         <td className="px-4 py-4">
                           <div className={`text-base ${textMain} whitespace-nowrap`}>
-                            {reservation.players}
+                            {contact.source}
                           </div>
                         </td>
                         <td className="px-4 py-4">
-                          <span
-                            className={`inline-block px-3 py-1.5 rounded text-sm font-bold whitespace-nowrap ${
-                              reservation.status === 'confirmed'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-red-500/20 text-red-400'
-                            }`}
-                          >
-                            {reservation.status === 'confirmed' ? 'Confirmée' : 'Annulée'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          {reservation.status === 'confirmed' && (
-                            <button
-                              onClick={() => handleCancelReservation(reservation.id)}
-                              className="p-2 bg-red-500/20 border border-red-500/30 rounded hover:bg-red-500/30 transition-all"
-                              title="Annuler la réservation"
-                            >
-                              <Ban className="w-5 h-5 text-red-400" />
-                            </button>
-                          )}
+                          <div className={`text-sm ${textSecondary} whitespace-pre-line max-w-xs`}>
+                            {contact.notes || ''}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2263,8 +2482,38 @@ export default function AdminPage() {
         )}
 
         {/* Vue Agenda */}
-        {viewMode === 'agenda' && (
-          <div className={`${bgCard} backdrop-blur-sm rounded-2xl border ${borderColor}`}>
+        {viewMode === 'agenda' && (() => {
+          // Filtrer les appointments selon la recherche Agenda
+          const filteredAppointments = agendaSearchQuery
+            ? appointments.filter((a) => {
+                const searchLower = agendaSearchQuery.toLowerCase()
+                const customerName = `${a.customerFirstName || ''} ${a.customerLastName || ''}`.toLowerCase().trim()
+                const dateStr = a.date
+                const timeStr = `${String(a.hour).padStart(2, '0')}:${String(a.minute || 0).padStart(2, '0')}`
+                const title = (a.title || '').toLowerCase()
+                const eventNotes = (a.eventNotes || '').toLowerCase()
+                const customerNotes = (a.customerNotes || '').toLowerCase()
+                const customerPhone = (a.customerPhone || '').toLowerCase()
+                const customerEmail = (a.customerEmail || '').toLowerCase()
+                const branch = (a.branch || '').toLowerCase()
+                
+                return (
+                  customerName.includes(searchLower) ||
+                  dateStr.includes(searchLower) ||
+                  timeStr.includes(searchLower) ||
+                  title.includes(searchLower) ||
+                  eventNotes.includes(searchLower) ||
+                  customerNotes.includes(searchLower) ||
+                  customerPhone.includes(searchLower) ||
+                  customerEmail.includes(searchLower) ||
+                  branch.includes(searchLower) ||
+                  a.id.toLowerCase().includes(searchLower)
+                )
+              })
+            : appointments
+          
+          return (
+            <div className={`${bgCard} backdrop-blur-sm rounded-2xl border ${borderColor}`}>
             {/* Barre supérieure : Bouton paramètres + Icône calendrier + Date centrée + Jours de la semaine à droite */}
             <div className={`${bgHeader} border-b ${borderColor} px-4 py-3`}>
               <div className="flex items-center justify-between gap-4">
@@ -2456,32 +2705,73 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                {/* Jours de la semaine (clic rapide) à droite */}
-                <div className="flex gap-2">
-                  {weekDays.map((day, index) => {
-                    const isToday = day.toDateString() === new Date().toDateString()
-                    const isSelected = day.toDateString() === selectedDate.toDateString()
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => handleWeekDayClick(day)}
-                        className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          isSelected
-                            ? `bg-primary/20 border-primary ${textPrimary} font-bold`
-                            : isToday
-                            ? `bg-primary/10 border-primary/30 ${textPrimary}`
-                            : `${bgCard} ${borderColor} ${textMain} hover:${bgCardHover}`
-                        }`}
-                      >
-                        <div className={`text-xs ${textSecondary} leading-tight`}>
-                          {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
-                        </div>
-                        <div className="text-sm font-bold leading-tight">
-                          {day.getDate()}
-                        </div>
-                      </button>
-                    )
-                  })}
+                {/* Jours de la semaine (clic rapide) à droite avec navigation semaine */}
+                <div className="flex items-center gap-2">
+                  {/* Flèche gauche : semaine précédente */}
+                  <button
+                    onClick={() => {
+                      const newWeekStart = new Date(currentWeekStart)
+                      newWeekStart.setDate(newWeekStart.getDate() - 7)
+                      setCurrentWeekStart(newWeekStart)
+                      // Mettre à jour la date sélectionnée pour rester sur le même jour de la semaine
+                      const dayOfWeek = selectedDate.getDay()
+                      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+                      const newSelectedDate = new Date(newWeekStart)
+                      newSelectedDate.setDate(newWeekStart.getDate() + diffToMonday + (selectedDate.getDay() === 0 ? 6 : selectedDate.getDay() - 1))
+                      setSelectedDate(newSelectedDate)
+                    }}
+                    className={`p-2 ${bgCard} border ${borderColor} rounded-lg hover:${bgCardHover} transition-all`}
+                    title="Semaine précédente"
+                  >
+                    <ChevronLeft className={`w-5 h-5 ${textPrimary}`} />
+                  </button>
+                  
+                  {/* Jours de la semaine */}
+                  <div className="flex gap-2">
+                    {weekDays.map((day, index) => {
+                      const isToday = day.toDateString() === new Date().toDateString()
+                      const isSelected = day.toDateString() === selectedDate.toDateString()
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleWeekDayClick(day)}
+                          className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                            isSelected
+                              ? `bg-primary/20 border-primary ${textPrimary} font-bold`
+                              : isToday
+                              ? `bg-primary/10 border-primary/30 ${textPrimary}`
+                              : `${bgCard} ${borderColor} ${textMain} hover:${bgCardHover}`
+                          }`}
+                        >
+                          <div className={`text-xs ${textSecondary} leading-tight`}>
+                            {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
+                          </div>
+                          <div className="text-sm font-bold leading-tight">
+                            {day.getDate()}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Flèche droite : semaine suivante */}
+                  <button
+                    onClick={() => {
+                      const newWeekStart = new Date(currentWeekStart)
+                      newWeekStart.setDate(newWeekStart.getDate() + 7)
+                      setCurrentWeekStart(newWeekStart)
+                      // Mettre à jour la date sélectionnée pour rester sur le même jour de la semaine
+                      const dayOfWeek = selectedDate.getDay()
+                      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+                      const newSelectedDate = new Date(newWeekStart)
+                      newSelectedDate.setDate(newWeekStart.getDate() + diffToMonday + (selectedDate.getDay() === 0 ? 6 : selectedDate.getDay() - 1))
+                      setSelectedDate(newSelectedDate)
+                    }}
+                    className={`p-2 ${bgCard} border ${borderColor} rounded-lg hover:${bgCardHover} transition-all`}
+                    title="Semaine suivante"
+                  >
+                    <ChevronRight className={`w-5 h-5 ${textPrimary}`} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -2594,7 +2884,7 @@ export default function AdminPage() {
 
                   // Trouver les rendez-vous qui COMMENCENT à cette heure (sans doublons)
                   // Pour les événements avec salle, on vérifie si le jeu (centré) commence à cette heure
-                  const appointmentsStartingHere = appointments.filter((a, index, self) => {
+                  const appointmentsStartingHere = filteredAppointments.filter((a, index, self) => {
                     if (a.date !== dateStr) return false
                     const assignedSlots = a.assignedSlots || []
                     if (assignedSlots.length === 0) return false
@@ -2608,7 +2898,7 @@ export default function AdminPage() {
                   })
 
                   // Rendez-vous qui utilisent une salle à cette heure
-                  const appointmentsWithRooms = appointments.filter((a, index, self) => {
+                  const appointmentsWithRooms = filteredAppointments.filter((a, index, self) => {
                     if (a.date !== dateStr) return false
                     if (!a.assignedRoom) return false
                     if (a.eventType === 'game') return false // Les "game" ne bloquent pas les salles
@@ -2882,6 +3172,8 @@ export default function AdminPage() {
                     setAppointmentTitle('')
                     setAppointmentHour(null)
                     setAppointmentDate('')
+                    setSelectedContactId(null)
+                    setShowContactSuggestions(false)
                   }}
                 />
                 {/* Fenêtre pop-up indépendante, draggable */}
@@ -2993,7 +3285,13 @@ export default function AdminPage() {
                             <input
                               type="date"
                               value={appointmentDate}
-                              onChange={(e) => setAppointmentDate(e.target.value)}
+                              onChange={(e) => {
+                                setAppointmentDate(e.target.value)
+                                // Réinitialiser les informations de conflit si l'utilisateur change la date
+                                setShowOverlapConfirm(false)
+                                setOverlapInfo(null)
+                                setPendingSave(null)
+                              }}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                             />
                           </div>
@@ -3011,6 +3309,10 @@ export default function AdminPage() {
                                   setAppointmentHour(null)
                                   setAppointmentMinute(0)
                                 }
+                                // Réinitialiser les informations de conflit si l'utilisateur change l'heure
+                                setShowOverlapConfirm(false)
+                                setOverlapInfo(null)
+                                setPendingSave(null)
                               }}
                               className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                             >
@@ -3080,16 +3382,55 @@ export default function AdminPage() {
 
                       {/* Section 2 : Informations Client & Jeu */}
                       <div>
-                        <h4 className={`text-base font-semibold mb-3 ${textPrimary}`}>Informations client & jeu</h4>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className={`text-base font-semibold ${textPrimary}`}>Informations client & jeu</h4>
+                          {editingAppointment && !isContactEditable && (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsContactEditable(true)
+                                  setShowContactSuggestions(false)
+                                }}
+                                className={`px-3 py-1.5 text-xs rounded border ${borderColor} ${bgCard} ${textSecondary} hover:${bgCardHover} transition-all`}
+                              >
+                                Modifier le contact
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsContactEditable(true)
+                                  setSelectedContactId(null)
+                                  setAppointmentCustomerFirstName('')
+                                  setAppointmentCustomerLastName('')
+                                  setAppointmentCustomerPhone('')
+                                  setAppointmentCustomerEmail('')
+                                  setAppointmentCustomerNotes('')
+                                  setShowContactSuggestions(false)
+                                }}
+                                className={`px-3 py-1.5 text-xs rounded border ${borderColor} ${bgCard} ${textSecondary} hover:${bgCardHover} transition-all`}
+                              >
+                                Changer de contact
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className={`block text-sm mb-1 ${textSecondary}`}>Prénom</label>
                             <input
                               type="text"
                               value={appointmentCustomerFirstName}
-                              onChange={(e) => setAppointmentCustomerFirstName(e.target.value)}
-                              autoFocus={!editingAppointment} // Auto-focus sur prénom pour nouveau événement
-                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAppointmentCustomerFirstName(value)
+                                if (isContactEditable) {
+                                  updateContactSuggestions(value)
+                                }
+                              }}
+                              disabled={!isContactEditable}
+                              autoFocus={!editingAppointment && isContactEditable} // Auto-focus sur prénom pour nouveau événement
+                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
                           <div>
@@ -3097,8 +3438,15 @@ export default function AdminPage() {
                             <input
                               type="text"
                               value={appointmentCustomerLastName}
-                              onChange={(e) => setAppointmentCustomerLastName(e.target.value)}
-                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAppointmentCustomerLastName(value)
+                                if (isContactEditable) {
+                                  updateContactSuggestions(value)
+                                }
+                              }}
+                              disabled={!isContactEditable}
+                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
 
@@ -3107,8 +3455,15 @@ export default function AdminPage() {
                             <input
                               type="tel"
                               value={appointmentCustomerPhone}
-                              onChange={(e) => setAppointmentCustomerPhone(e.target.value)}
-                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAppointmentCustomerPhone(value)
+                                if (isContactEditable) {
+                                  updateContactSuggestions(value)
+                                }
+                              }}
+                              disabled={!isContactEditable}
+                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
                           <div>
@@ -3116,8 +3471,15 @@ export default function AdminPage() {
                             <input
                               type="email"
                               value={appointmentCustomerEmail}
-                              onChange={(e) => setAppointmentCustomerEmail(e.target.value)}
-                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAppointmentCustomerEmail(value)
+                                if (isContactEditable) {
+                                  updateContactSuggestions(value)
+                                }
+                              }}
+                              disabled={!isContactEditable}
+                              className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             />
                           </div>
 
@@ -3142,14 +3504,57 @@ export default function AdminPage() {
                                 type="number"
                                 min={1}
                                 value={appointmentParticipants ?? ''}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setAppointmentParticipants(e.target.value ? Number(e.target.value) : null)
-                                }
+                                  // Réinitialiser les informations de conflit si l'utilisateur change le nombre de participants
+                                  setShowOverlapConfirm(false)
+                                  setOverlapInfo(null)
+                                  setPendingSave(null)
+                                }}
                                 className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
                               />
                             </div>
                           </div>
                         </div>
+
+                        {/* Suggestions de contacts (CRM) - uniquement si édition activée */}
+                        {isContactEditable && showContactSuggestions && contactSuggestions.length > 0 && (
+                          <div className="mt-3 border border-primary/40 rounded-lg bg-black/40 max-h-60 overflow-y-auto text-sm">
+                            <div className="px-3 py-2 border-b border-primary/30 text-primary font-semibold">
+                              Sélectionner un contact existant
+                            </div>
+                            {contactSuggestions.map((contact) => (
+                              <button
+                                key={contact.id}
+                                type="button"
+                                onClick={() => handleSelectContact(contact)}
+                                className="w-full text-left px-3 py-2 hover:bg-primary/10 border-b border-white/5 last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div>
+                                    <div className={`font-semibold ${textPrimary}`}>
+                                      {(contact.firstName || '') + ' ' + (contact.lastName || '')}
+                                    </div>
+                                    <div className={`text-xs ${textSecondary}`}>
+                                      {contact.phone}
+                                      {contact.email ? ` • ${contact.email}` : ''}
+                                    </div>
+                                  </div>
+                                  {contact.branch && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary">
+                                      {contact.branch}
+                                    </span>
+                                  )}
+                                </div>
+                                {contact.notes && (
+                                  <div className={`mt-1 text-[11px] ${textSecondary} line-clamp-2`}>
+                                    {contact.notes}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
                         <div className="mt-4">
                           <label className={`block text-sm mb-1 ${textSecondary}`}>
@@ -3158,8 +3563,9 @@ export default function AdminPage() {
                           <textarea
                             value={appointmentCustomerNotes}
                             onChange={(e) => setAppointmentCustomerNotes(e.target.value)}
+                            disabled={!isContactEditable}
                             rows={3}
-                            className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary`}
+                            className={`w-full px-3 py-2 rounded border ${borderColor} ${inputBg} ${textMain} text-sm focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                             placeholder="Allergies, langage, demandes spéciales, etc."
                           />
                         </div>
@@ -3187,6 +3593,8 @@ export default function AdminPage() {
                             setAppointmentTitle('')
                             setAppointmentHour(null)
                             setAppointmentDate('')
+                            setSelectedContactId(null)
+                            setShowContactSuggestions(false)
                           }}
                           className={`px-4 py-2 rounded-lg border ${borderColor} text-sm ${textSecondary} hover:${bgCardHover} transition-all min-w-[120px]`}
                         >
@@ -3474,7 +3882,8 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )

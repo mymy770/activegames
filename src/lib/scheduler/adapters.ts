@@ -60,6 +60,9 @@ export function toBooking(appointment: SimpleAppointment): Booking {
     roomOvercapParticipants: appointment.roomOvercapParticipants,
     customerFirstName: appointment.customerFirstName,
     customerLastName: appointment.customerLastName,
+    customerPhone: appointment.customerPhone,
+    customerEmail: appointment.customerEmail,
+    customerNotes: appointment.customerNotes,
     color: appointment.color
   }
 }
@@ -81,9 +84,9 @@ export function fromBooking(booking: Booking, originalAppointment?: SimpleAppoin
     eventNotes: originalAppointment?.eventNotes,
     customerFirstName: booking.customerFirstName || originalAppointment?.customerFirstName,
     customerLastName: booking.customerLastName || originalAppointment?.customerLastName,
-    customerPhone: originalAppointment?.customerPhone,
-    customerEmail: originalAppointment?.customerEmail,
-    customerNotes: originalAppointment?.customerNotes,
+    customerPhone: booking.customerPhone || originalAppointment?.customerPhone,
+    customerEmail: booking.customerEmail || originalAppointment?.customerEmail,
+    customerNotes: booking.customerNotes || originalAppointment?.customerNotes,
     gameDurationMinutes: booking.gameDurationMinutes,
     participants: booking.participants,
     assignedSlots: booking.assignedSlots,
