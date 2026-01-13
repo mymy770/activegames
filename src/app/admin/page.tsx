@@ -530,11 +530,26 @@ export default function AdminPage() {
     return 'Nouvel événement'
   }
 
-  // Formater l'affichage de l'événement dans l'agenda
+  // Formater l'affichage de l'événement dans l'agenda (pour les slots)
+  // IMPORTANT : Pour les EVENT avec room, utiliser l'heure du jeu (centré), pas l'heure de la room
   const formatAppointmentDisplay = (appointment: SimpleAppointment): string => {
     const name = generateAppointmentTitle(appointment.customerFirstName, appointment.customerLastName)
     const participants = appointment.participants ? `${appointment.participants} pers.` : ''
-    const time = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
+    
+    // Pour les EVENT avec room et slots, utiliser l'heure du jeu (centré)
+    // Sinon, utiliser l'heure normale
+    let time: string
+    const isEventWithRoom = appointment.assignedRoom && appointment.durationMinutes && appointment.durationMinutes > 60
+    if (isEventWithRoom && appointment.assignedSlots && appointment.assignedSlots.length > 0) {
+      // Utiliser l'heure du jeu centré
+      const { gameStartMinutes } = calculateCenteredGameTime(appointment)
+      const gameStartHour = Math.floor(gameStartMinutes / 60)
+      const gameStartMinute = gameStartMinutes % 60
+      time = `${String(gameStartHour).padStart(2, '0')}:${String(gameStartMinute).padStart(2, '0')}`
+    } else {
+      // Utiliser l'heure normale (pour GAME ou EVENT sans slots)
+      time = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
+    }
     
     let display = name
     if (participants) {
@@ -545,9 +560,11 @@ export default function AdminPage() {
   }
 
   // Formater l'affichage pour les salles (avec retour à la ligne)
+  // IMPORTANT : Pour les rooms, utiliser TOUJOURS l'heure de la room (appointment.hour/minute)
   const formatAppointmentDisplayForRooms = (appointment: SimpleAppointment) => {
     const name = generateAppointmentTitle(appointment.customerFirstName, appointment.customerLastName)
     const participants = appointment.participants ? `${appointment.participants} pers.` : ''
+    // Pour les rooms, utiliser TOUJOURS l'heure de la room
     const time = `${String(appointment.hour).padStart(2, '0')}:${String(appointment.minute || 0).padStart(2, '0')}`
     
     return {
