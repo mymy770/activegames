@@ -75,6 +75,10 @@ export interface Booking {
   assignedSlots?: SlotId[]
   assignedRoom?: RoomId
   
+  // Liens pour séparation room/jeu
+  linkedGameId?: string // Pour EVENT : ID du GAME associé (les slots de jeu)
+  linkedRoomId?: string // Pour GAME : ID du EVENT associé (la room)
+  
   // Exceptions/confirmations
   surbooked?: boolean
   surbookedParticipants?: number // Nombre de personnes en trop
