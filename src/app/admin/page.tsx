@@ -127,23 +127,76 @@ export default function AdminPage() {
     slotStart: number
     slotEnd: number
     slotsKey: string // Clé pour identifier les slots (pour regrouper les segments contigus)
+    isOverbooked: boolean // Overbooking sur la tranche de 15 min correspondante
+  }
+
+  // Type pour les données OB par tranche de 15 min
+  interface OBData {
+    totalParticipants: number
+    capacity: number
+    isOverbooked: boolean
+    overbookedCount: number
+  }
+
+  // Constantes configurables
+  const MAX_PLAYERS_PER_SLOT = 6 // TODO: Rendre configurable via settings si besoin
+  const SLOT_DURATION = 15 // minutes
+  const TOTAL_SLOTS = 14 // Défini ici pour être accessible dans buildUISegments()
+  const TOTAL_ROOMS = 4
+
+  // Générer toutes les tranches de 15 minutes pour la journée (pour les calculs de segments)
+  const timeSlotDates: Date[] = []
+  for (let h = 10; h <= 22; h++) {
+    for (const m of [0, 15, 30, 45]) {
+      const slotDate = new Date(selectedDate)
+      slotDate.setHours(h, m, 0, 0)
+      timeSlotDates.push(slotDate)
+    }
+  }
+
+  // Pré-calculer les données OB pour toutes les tranches de 15 min (une fois par date)
+  // Note: capacity sera passé en paramètre car CAPACITY n'est pas encore défini ici
+  const calculateOBMapForDate = (capacity: number): Map<number, OBData> => {
+    const obByTimeKey = new Map<number, OBData>()
+
+    for (const timeSlotStart of timeSlotDates) {
+      const timeSlotEnd = new Date(timeSlotStart)
+      timeSlotEnd.setMinutes(timeSlotEnd.getMinutes() + SLOT_DURATION)
+
+      // Calculer totalParticipants = somme des participants actifs sur cette tranche
+      let totalParticipants = 0
+      for (const booking of bookings) {
+        if (booking.type !== 'GAME' && booking.type !== 'EVENT') continue
+        // Les EVENT bloquent aussi le temps de jeu, même s'ils ont une salle
+        const bookingStart = booking.game_start_datetime ? new Date(booking.game_start_datetime) : new Date(booking.start_datetime)
+        const bookingEnd = booking.game_end_datetime ? new Date(booking.game_end_datetime) : new Date(booking.end_datetime)
+        
+        // Vérifier si ce booking est actif sur cette tranche
+        if (bookingStart < timeSlotEnd && bookingEnd > timeSlotStart) {
+          totalParticipants += booking.participants_count
+        }
+      }
+
+      const isOverbooked = totalParticipants > capacity
+      const overbookedCount = isOverbooked ? totalParticipants - capacity : 0
+
+      // Clé = timestamp arrondi à 15 min
+      const timeKey = Math.floor(timeSlotStart.getTime() / (SLOT_DURATION * 60 * 1000)) * (SLOT_DURATION * 60 * 1000)
+
+      obByTimeKey.set(timeKey, {
+        totalParticipants,
+        capacity,
+        isOverbooked,
+        overbookedCount
+      })
+    }
+
+    return obByTimeKey
   }
 
   // Construire les segments UI à partir des bookings (uniquement pour l'affichage)
   const buildUISegments = (): UISegment[] => {
     const segments: UISegment[] = []
-    const SLOT_DURATION = 15 // minutes
-    const MAX_PLAYERS_PER_SLOT = 6
-
-    // Générer toutes les tranches de 15 minutes pour la journée
-    const timeSlots: Date[] = []
-    for (let h = 10; h <= 22; h++) {
-      for (const m of [0, 15, 30, 45]) {
-        const slotDate = new Date(selectedDate)
-        slotDate.setHours(h, m, 0, 0)
-        timeSlots.push(slotDate)
-      }
-    }
 
     // Fonction pour calculer quels slots sont occupés pour une tranche de 15 minutes
     const getOccupiedSlotsForTimeSlot = (timeSlotStart: Date): Map<string, { slotStart: number; slotEnd: number }> => {
@@ -194,10 +247,9 @@ export default function AdminPage() {
         const gameEndTime = booking.game_end_datetime ? new Date(booking.game_end_datetime) : new Date(booking.end_datetime)
 
         // Trouver les tranches de 15 minutes couvertes
-        let currentSegment: UISegment | null = null
-
-        for (let i = 0; i < timeSlots.length; i++) {
-          const timeSlotStart = timeSlots[i]
+        // Découper par tranche de 15 min : un segment par tranche
+        for (let i = 0; i < timeSlotDates.length; i++) {
+          const timeSlotStart = timeSlotDates[i]
           const timeSlotEnd = new Date(timeSlotStart)
           timeSlotEnd.setMinutes(timeSlotEnd.getMinutes() + SLOT_DURATION)
 
@@ -208,48 +260,47 @@ export default function AdminPage() {
             const bookingSlotInfo = occupiedSlots.get(booking.id)
 
             if (bookingSlotInfo) {
-              const { slotStart, slotEnd } = bookingSlotInfo
-              const slotsKey = `${slotStart}-${slotEnd}`
-
-              // Vérifier si on peut continuer le segment actuel (mêmes slots)
-              if (currentSegment && currentSegment.slotsKey === slotsKey) {
-                // Continuer le segment
-                currentSegment.end = timeSlotEnd
-              } else {
-                // Nouveau segment
-                if (currentSegment) {
-                  segments.push(currentSegment)
-                }
-                currentSegment = {
-                  segmentId: `${booking.id}-${timeSlotStart.getTime()}-${timeSlotEnd.getTime()}-${slotsKey}`,
-                  bookingId: booking.id,
-                  booking,
-                  start: timeSlotStart,
-                  end: timeSlotEnd,
-                  slotStart,
-                  slotEnd,
-                  slotsKey
-                }
+              let { slotStart, slotEnd } = bookingSlotInfo
+              
+              // HARD BOUNDARY : Clamp slotEnd à 14 maximum (jamais de débordement)
+              if (slotEnd > TOTAL_SLOTS) {
+                slotEnd = TOTAL_SLOTS
               }
-            }
-          } else {
-            // Fin du segment
-            if (currentSegment) {
-              segments.push(currentSegment)
-              currentSegment = null
+              
+              // Découper par tranche de 15 min : un segment par tranche
+              const slotsKey = `${slotStart}-${slotEnd}`
+              
+              // Lookup OB pour cette tranche (O(1))
+              const timeKey = Math.floor(timeSlotStart.getTime() / (SLOT_DURATION * 60 * 1000)) * (SLOT_DURATION * 60 * 1000)
+              const obData = obByTimeKey.get(timeKey)
+              const isOverbooked = obData?.isOverbooked || false
+
+              // Créer un segment pour cette tranche de 15 min
+              segments.push({
+                segmentId: `${booking.id}-${timeSlotStart.getTime()}-${timeSlotEnd.getTime()}-${slotsKey}`,
+                bookingId: booking.id,
+                booking,
+                start: timeSlotStart,
+                end: timeSlotEnd,
+                slotStart,
+                slotEnd,
+                slotsKey,
+                isOverbooked
+              })
             }
           }
-        }
-
-        // Ajouter le dernier segment s'il existe
-        if (currentSegment) {
-          segments.push(currentSegment)
         }
       }
     }
 
     return segments
   }
+
+  // Calculer CAPACITY (après les hooks, mais TOTAL_SLOTS est déjà défini plus haut)
+  const CAPACITY = TOTAL_SLOTS * MAX_PLAYERS_PER_SLOT // 14 * 6 = 84
+
+  // Pré-calculer la map OB une fois (après définition de CAPACITY, avant buildUISegments)
+  const obByTimeKey = calculateOBMapForDate(CAPACITY)
 
   // Construire les segments UI
   const uiSegments = buildUISegments()
@@ -735,50 +786,8 @@ export default function AdminPage() {
   }
 
 
-  // Vérifier si un créneau contient un segment (pour les slots)
-  const getSegmentForCell = (hour: number, minute: number, slotIndex: number, isRoom: boolean): UISegment | null => {
-    if (isRoom) {
-      // Pour les rooms : utiliser l'ancienne logique mais filtrer uniquement EVENT
-      const cellTime = hour * 60 + minute
-      for (let i = bookings.length - 1; i >= 0; i--) {
-        const booking = bookings[i]
-        // RÈGLE BÉTON : Rooms = uniquement EVENT
-        if (booking.type !== 'EVENT') continue
-        if (!booking.event_room_id) continue
-
-        const bookingRoom = branchRooms.find(r => r.id === booking.event_room_id)
-        if (!bookingRoom) continue
-
-        const sortedRooms = [...branchRooms]
-          .filter(r => r.is_active)
-          .sort((a, b) => a.sort_order - b.sort_order)
-        
-        const roomIndex = sortedRooms.findIndex(r => r.id === booking.event_room_id)
-        if (roomIndex !== slotIndex) continue
-
-        const startTime = new Date(booking.start_datetime)
-        const endTime = new Date(booking.end_datetime)
-        const bookingStartMinutes = startTime.getHours() * 60 + startTime.getMinutes()
-        const bookingEndMinutes = endTime.getHours() * 60 + endTime.getMinutes()
-        
-        if (cellTime >= bookingStartMinutes && cellTime < bookingEndMinutes) {
-          // Retourner un segment factice pour les rooms (pour compatibilité)
-          return {
-            segmentId: `${booking.id}-room-${slotIndex}`,
-            bookingId: booking.id,
-            booking,
-            start: startTime,
-            end: endTime,
-            slotStart: slotIndex,
-            slotEnd: slotIndex + 1,
-            slotsKey: `room-${slotIndex}`
-          }
-        }
-      }
-      return null
-    }
-
-    // Pour les slots : utiliser les segments UI
+  // Vérifier si un créneau contient un segment pour GRID GAME (slots uniquement)
+  const getSegmentForCellSlots = (hour: number, minute: number, slotIndex: number): UISegment | null => {
     const cellDate = new Date(selectedDate)
     cellDate.setHours(hour, minute, 0, 0)
     const cellDateEnd = new Date(cellDate)
@@ -800,6 +809,48 @@ export default function AdminPage() {
     return null
   }
 
+  // Vérifier si un créneau contient un segment pour GRID ROOMS (rooms uniquement)
+  const getSegmentForCellRooms = (hour: number, minute: number, roomIndex: number): UISegment | null => {
+    const cellTime = hour * 60 + minute
+    for (let i = bookings.length - 1; i >= 0; i--) {
+      const booking = bookings[i]
+      // RÈGLE BÉTON : Rooms = uniquement EVENT
+      if (booking.type !== 'EVENT') continue
+      if (!booking.event_room_id) continue
+
+      const bookingRoom = branchRooms.find(r => r.id === booking.event_room_id)
+      if (!bookingRoom) continue
+
+      const sortedRooms = [...branchRooms]
+        .filter(r => r.is_active)
+        .sort((a, b) => a.sort_order - b.sort_order)
+      
+      const bookingRoomIndex = sortedRooms.findIndex(r => r.id === booking.event_room_id)
+      if (bookingRoomIndex !== roomIndex) continue
+
+      const startTime = new Date(booking.start_datetime)
+      const endTime = new Date(booking.end_datetime)
+      const bookingStartMinutes = startTime.getHours() * 60 + startTime.getMinutes()
+      const bookingEndMinutes = endTime.getHours() * 60 + endTime.getMinutes()
+      
+      if (cellTime >= bookingStartMinutes && cellTime < bookingEndMinutes) {
+        // Retourner un segment factice pour les rooms (pour compatibilité)
+        return {
+          segmentId: `${booking.id}-room-${roomIndex}`,
+          bookingId: booking.id,
+          booking,
+          start: startTime,
+          end: endTime,
+          slotStart: roomIndex,
+          slotEnd: roomIndex + 1,
+          slotsKey: `room-${roomIndex}`,
+          isOverbooked: false // Rooms n'ont pas d'overbooking
+        }
+      }
+    }
+    return null
+  }
+
   // Calculer les dimensions d'une réservation (nombre de créneaux horaires et de slots)
   const getBookingDimensions = (booking: BookingWithSlots, isRoom: boolean): {
     timeSlots: number // Nombre de créneaux horaires (30 min chacun)
@@ -814,12 +865,14 @@ export default function AdminPage() {
     
     // Calculer le nombre de créneaux horaires (chaque créneau = 30 min)
     const durationMinutes = bookingEndMinutes - bookingStartMinutes
-    const timeSlots = Math.ceil(durationMinutes / 30)
+    const numberOfTimeSlots = Math.ceil(durationMinutes / 30)
     
-    // Trouver l'index du premier créneau horaire dans timeSlots
-    const startHour = Math.floor(bookingStartMinutes / 60)
-    const startMinute = bookingStartMinutes % 60
-    const startTimeSlotIndex = timeSlots.findIndex(ts => ts.hour === startHour && ts.minute === startMinute)
+    // Trouver l'index du premier créneau horaire dans timeSlots (le tableau défini plus bas)
+    // Note: Cette fonction est appelée avant la déclaration de timeSlots, donc on ne peut pas l'utiliser ici
+    // Cette logique semble obsolète, on la commente pour l'instant
+    // const startHour = Math.floor(bookingStartMinutes / 60)
+    // const startMinute = bookingStartMinutes % 60
+    // const startTimeSlotIndex = timeSlots.findIndex(ts => ts.hour === startHour && ts.minute === startMinute)
     
     let slotCount = 1
     let startSlotIndex = 0
@@ -835,9 +888,9 @@ export default function AdminPage() {
     }
     
     return {
-      timeSlots,
+      timeSlots: numberOfTimeSlots,
       slotCount,
-      startTimeSlotIndex,
+      startTimeSlotIndex: 0, // Non utilisé pour l'instant
       startSlotIndex
     }
   }
@@ -862,8 +915,6 @@ export default function AdminPage() {
 
   const selectedBranch = userData.branches.find(b => b.id === selectedBranchId)
   const isDark = theme === 'dark'
-  const TOTAL_SLOTS = 14
-  const TOTAL_ROOMS = 4
 
   // Récupérer les salles et settings de la branche sélectionnée
   const branchWithDetails = branches.find(b => b.id === selectedBranchId)
@@ -1388,37 +1439,30 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* En-tête */}
-          <div className={`grid ${isDark ? '' : ''}`} style={{
-            gridTemplateColumns: `80px repeat(${TOTAL_SLOTS}, 1fr) repeat(${TOTAL_ROOMS}, 1fr)`,
-            borderBottom: `2px solid ${isDark ? '#374151' : '#e5e7eb'}` // Même épaisseur que les cellules (2px)
-          }}>
-            <div className={`p-3 text-center font-medium ${isDark ? 'text-gray-400 bg-gray-900' : 'text-gray-600 bg-gray-50'}`}>
-              Heure
-            </div>
-            {Array.from({ length: TOTAL_SLOTS }, (_, i) => (
-              <div key={`slot-${i}`} className={`p-3 text-center font-medium border-l ${isDark ? 'text-blue-400 bg-gray-900 border-gray-700' : 'text-blue-600 bg-gray-50 border-gray-200'}`}>
-                S{i + 1}
-              </div>
-            ))}
-            {branchRooms
-              .sort((a, b) => a.sort_order - b.sort_order)
-              .slice(0, TOTAL_ROOMS)
-              .map((room, i) => {
-                const roomName = room.name || `Salle ${i + 1}`
-                return (
-                  <div key={`room-${room.id}`} className={`p-3 text-center font-medium border-l ${isDark ? 'text-green-400 bg-gray-900 border-gray-700' : 'text-green-600 bg-gray-50 border-gray-200'}`}>
-                    {roomName}
+          {/* 3 Grilles séparées côte à côte */}
+          <div className="flex gap-0">
+            {/* GRID GAME - Heure + S1-S14 */}
+            <div className="flex-shrink-0" style={{ borderRight: `2px solid ${isDark ? '#374151' : '#e5e7eb'}` }}>
+              {/* En-tête GRID GAME */}
+              <div className={`grid ${isDark ? '' : ''}`} style={{
+                gridTemplateColumns: `80px repeat(${TOTAL_SLOTS}, 1fr)`,
+                borderBottom: `2px solid ${isDark ? '#374151' : '#e5e7eb'}`
+              }}>
+                <div className={`p-3 text-center font-medium ${isDark ? 'text-gray-400 bg-gray-900' : 'text-gray-600 bg-gray-50'}`}>
+                  Heure
+                </div>
+                {Array.from({ length: TOTAL_SLOTS }, (_, i) => (
+                  <div key={`slot-${i}`} className={`p-3 text-center font-medium border-l ${isDark ? 'text-blue-400 bg-gray-900 border-gray-700' : 'text-blue-600 bg-gray-50 border-gray-200'}`}>
+                    S{i + 1}
                   </div>
-                )
-              })}
-          </div>
+                ))}
+              </div>
 
-          {/* Corps - Grille avec réservations intégrées */}
-          <div className="grid" style={{
-            gridTemplateColumns: `80px repeat(${TOTAL_SLOTS}, 1fr) repeat(${TOTAL_ROOMS}, 1fr)`,
-            gridTemplateRows: `repeat(${timeSlots.length}, 20px)`, // Hauteur réduite car cases de 15 min
-          }}>
+              {/* Corps GRID GAME */}
+              <div className="grid" style={{
+                gridTemplateColumns: `80px repeat(${TOTAL_SLOTS}, 1fr)`,
+                gridTemplateRows: `repeat(${timeSlots.length}, 20px)`,
+              }}>
             {/* Colonne Heure */}
             {timeSlots.map((slot, timeIndex) => {
               // Pour avoir des lignes visibles à 10:00, 10:30, 11:00, etc. (créneaux de 30 minutes)
@@ -1464,26 +1508,26 @@ export default function AdminPage() {
                 <Fragment key={`row-${timeIndex}`}>
                   {/* Slots de jeu */}
                   {Array.from({ length: TOTAL_SLOTS }, (_, slotIndex) => {
-                    const segment = getSegmentForCell(slot.hour, slot.minute, slotIndex, false)
+                    const segment = getSegmentForCellSlots(slot.hour, slot.minute, slotIndex)
                     const booking = segment?.booking
                     
                     // Déterminer si cette cellule est le début d'un segment (top-left corner)
                     // Utiliser segmentId au lieu de booking.id
                     const isSegmentTop = segment && (
                       timeIndex === 0 ||
-                      getSegmentForCell(timeSlots[timeIndex - 1].hour, timeSlots[timeIndex - 1].minute, slotIndex, false)?.segmentId !== segment.segmentId
+                      getSegmentForCellSlots(timeSlots[timeIndex - 1].hour, timeSlots[timeIndex - 1].minute, slotIndex)?.segmentId !== segment.segmentId
                     )
                     const isSegmentStart = segment && (
                       slotIndex === segment.slotStart || 
-                      getSegmentForCell(slot.hour, slot.minute, slotIndex - 1, false)?.segmentId !== segment.segmentId
+                      getSegmentForCellSlots(slot.hour, slot.minute, slotIndex - 1)?.segmentId !== segment.segmentId
                     )
                     const isSegmentEnd = segment && (
                       slotIndex === segment.slotEnd - 1 || 
-                      getSegmentForCell(slot.hour, slot.minute, slotIndex + 1, false)?.segmentId !== segment.segmentId
+                      getSegmentForCellSlots(slot.hour, slot.minute, slotIndex + 1)?.segmentId !== segment.segmentId
                     )
                     const isSegmentBottom = segment && (
                       timeIndex === timeSlots.length - 1 ||
-                      getSegmentForCell(timeSlots[timeIndex + 1].hour, timeSlots[timeIndex + 1].minute, slotIndex, false)?.segmentId !== segment.segmentId
+                      getSegmentForCellSlots(timeSlots[timeIndex + 1].hour, timeSlots[timeIndex + 1].minute, slotIndex)?.segmentId !== segment.segmentId
                     )
                     
                     // Si cette cellule fait partie d'un segment mais n'est pas le début, ne pas la rendre
@@ -1514,11 +1558,10 @@ export default function AdminPage() {
                     const bookingStartTime = booking ? (booking.game_start_datetime ? new Date(booking.game_start_datetime) : new Date(booking.start_datetime)) : null
                     const displayTime = bookingStartTime ? formatTime(bookingStartTime) : ''
 
-                    // Calculer l'overbooking (si participants > capacité max de 84)
-                    const maxCapacity = TOTAL_SLOTS * 6 // 84
-                    const overbookedCount = booking && booking.participants_count > maxCapacity 
-                      ? booking.participants_count - maxCapacity 
-                      : 0
+                    // Vérifier que colSpan ne dépasse jamais TOTAL_SLOTS (hard boundary)
+                    if (segment && gridColumn + colSpan > TOTAL_SLOTS + 2) {
+                      colSpan = TOTAL_SLOTS + 2 - gridColumn
+                    }
 
                     return (
                       <div
@@ -1540,12 +1583,12 @@ export default function AdminPage() {
                           borderLeft: `2px solid ${booking ? (booking.color || (booking.type === 'EVENT' ? (isDark ? '#4ade80' : '#16a34a') : (isDark ? '#60a5fa' : '#2563eb'))) : (isDark ? '#374151' : '#e5e7eb')}`,
                           borderRight: `2px solid ${booking ? (booking.color || (booking.type === 'EVENT' ? (isDark ? '#4ade80' : '#16a34a') : (isDark ? '#60a5fa' : '#2563eb'))) : (isDark ? '#374151' : '#e5e7eb')}`,
                         }}
-                        title={booking ? `${booking.customer_first_name} ${booking.customer_last_name} - ${booking.participants_count} pers.${overbookedCount > 0 ? ` (${overbookedCount} en surplus)` : ''}` : ''}
+                        title={booking ? `${booking.customer_first_name} ${booking.customer_last_name} - ${booking.participants_count} pers.` : ''}
                       >
-                        {/* Indicateur d'overbooking (petit nombre à gauche) */}
-                        {booking && overbookedCount > 0 && showDetails && (
-                          <div className="absolute left-1 top-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center" style={{ zIndex: 10 }}>
-                            {overbookedCount}
+                        {/* Badge OB (sans chiffre) si overbooking sur cette tranche */}
+                        {segment && segment.isOverbooked && showDetails && (
+                          <div className="absolute left-1 top-1 bg-red-500 text-white text-xs font-bold rounded px-1" style={{ zIndex: 10 }}>
+                            OB
                           </div>
                         )}
                         {booking && showDetails && (
@@ -1556,10 +1599,122 @@ export default function AdminPage() {
                       </div>
                     )
                   })}
+                </Fragment>
+              )
+            })}
+              </div>
+            </div>
+
+            {/* GRID OB - 1 colonne métrique */}
+            <div className="flex-shrink-0" style={{ borderRight: `2px solid ${isDark ? '#374151' : '#e5e7eb'}` }}>
+              {/* En-tête GRID OB */}
+              <div className={`grid ${isDark ? '' : ''}`} style={{
+                gridTemplateColumns: `1fr`,
+                borderBottom: `2px solid ${isDark ? '#374151' : '#e5e7eb'}`
+              }}>
+                <div className={`p-3 text-center font-medium ${isDark ? 'text-yellow-400 bg-gray-900' : 'text-yellow-600 bg-gray-50'}`}>
+                  OB
+                </div>
+              </div>
+
+              {/* Corps GRID OB - Métrique pure, jamais de getSegmentForCell */}
+              <div className="grid" style={{
+                gridTemplateColumns: `1fr`,
+                gridTemplateRows: `repeat(${timeSlots.length}, 20px)`,
+              }}>
+                {timeSlots.map((slot, timeIndex) => {
+                  // Convertir slot en Date pour calculer timeKey
+                  const slotDate = new Date(selectedDate)
+                  slotDate.setHours(slot.hour, slot.minute, 0, 0)
                   
-                  {/* Salles d'événements */}
-                  {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
-                    const segment = getSegmentForCell(slot.hour, slot.minute, roomIndex, true)
+                  // Lookup OB pour cette tranche (O(1))
+                  const timeKey = Math.floor(slotDate.getTime() / (SLOT_DURATION * 60 * 1000)) * (SLOT_DURATION * 60 * 1000)
+                  const obData = obByTimeKey.get(timeKey)
+                  
+                  const showBorder = (slot.minute === 0 || slot.minute === 30)
+                  
+                  return (
+                    <div
+                      key={`ob-${timeIndex}`}
+                      className={`flex items-center justify-center text-sm font-bold ${
+                        obData && obData.totalParticipants > 0
+                          ? obData.isOverbooked
+                            ? 'text-red-500'
+                            : 'text-blue-500'
+                          : isDark ? 'text-gray-600' : 'text-gray-300'
+                      }`}
+                      style={{
+                        gridRow: timeIndex + 1,
+                        borderTop: showBorder ? `2px solid ${isDark ? '#374151' : '#e5e7eb'}` : 'none',
+                        borderBottom: 'none',
+                        borderLeft: 'none',
+                        borderRight: `2px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                      }}
+                    >
+                      {obData && obData.totalParticipants > 0 && (
+                        <span>
+                          {obData.isOverbooked ? `+${obData.overbookedCount}` : obData.totalParticipants}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* GRID ROOMS - Heure + Room A-D */}
+            <div className="flex-shrink-0">
+              {/* En-tête GRID ROOMS */}
+              <div className={`grid ${isDark ? '' : ''}`} style={{
+                gridTemplateColumns: `80px repeat(${TOTAL_ROOMS}, 1fr)`,
+                borderBottom: `2px solid ${isDark ? '#374151' : '#e5e7eb'}`
+              }}>
+                <div className={`p-3 text-center font-medium ${isDark ? 'text-gray-400 bg-gray-900' : 'text-gray-600 bg-gray-50'}`}>
+                  Heure
+                </div>
+                {branchRooms
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .slice(0, TOTAL_ROOMS)
+                  .map((room, i) => {
+                    const roomName = room.name || `Salle ${i + 1}`
+                    return (
+                      <div key={`room-${room.id}`} className={`p-3 text-center font-medium border-l ${isDark ? 'text-green-400 bg-gray-900 border-gray-700' : 'text-green-600 bg-gray-50 border-gray-200'}`}>
+                        {roomName}
+                      </div>
+                    )
+                  })}
+              </div>
+
+              {/* Corps GRID ROOMS */}
+              <div className="grid" style={{
+                gridTemplateColumns: `80px repeat(${TOTAL_ROOMS}, 1fr)`,
+                gridTemplateRows: `repeat(${timeSlots.length}, 20px)`,
+              }}>
+                {/* Colonne Heure pour ROOMS */}
+                {timeSlots.map((slot, timeIndex) => {
+                  const showBorder = (slot.minute === 0 || slot.minute === 30)
+                  return (
+                    <div
+                      key={`time-room-${timeIndex}`}
+                      className={`p-2 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
+                      style={{
+                        gridColumn: '1',
+                        gridRow: timeIndex + 1,
+                        borderTop: showBorder ? `2px solid ${isDark ? '#374151' : '#e5e7eb'}` : 'none',
+                        borderRight: `2px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                      }}
+                    >
+                      {(slot.minute === 0 || slot.minute === 30) ? slot.label : ''}
+                    </div>
+                  )
+                })}
+                
+                {/* Salles d'événements */}
+                {timeSlots.map((slot, timeIndex) => {
+                  return (
+                    <Fragment key={`row-room-${timeIndex}`}>
+                      {Array.from({ length: TOTAL_ROOMS }, (_, roomIndex) => {
+                        const segment = getSegmentForCellRooms(slot.hour, slot.minute, roomIndex)
                     const booking = segment?.booking
                     
                     // RÈGLE BÉTON : Rooms = uniquement EVENT
@@ -1567,29 +1722,29 @@ export default function AdminPage() {
                     
                     // Déterminer si cette cellule est le début d'un segment (top-left corner)
                     // Utiliser segmentId au lieu de booking.id
-                    const isSegmentTop = segment && (
-                      timeIndex === 0 ||
-                      getSegmentForCell(timeSlots[timeIndex - 1].hour, timeSlots[timeIndex - 1].minute, roomIndex, true)?.segmentId !== segment.segmentId
-                    )
-                    const isSegmentStart = segment && (
-                      roomIndex === 0 || 
-                      getSegmentForCell(slot.hour, slot.minute, roomIndex - 1, true)?.segmentId !== segment.segmentId
-                    )
-                    const isSegmentEnd = segment && (
-                      roomIndex === TOTAL_ROOMS - 1 || 
-                      getSegmentForCell(slot.hour, slot.minute, roomIndex + 1, true)?.segmentId !== segment.segmentId
-                    )
-                    const isSegmentBottom = segment && (
-                      timeIndex === timeSlots.length - 1 ||
-                      getSegmentForCell(timeSlots[timeIndex + 1].hour, timeSlots[timeIndex + 1].minute, roomIndex, true)?.segmentId !== segment.segmentId
-                    )
+                        const isSegmentTop = segment && (
+                          timeIndex === 0 ||
+                          getSegmentForCellRooms(timeSlots[timeIndex - 1].hour, timeSlots[timeIndex - 1].minute, roomIndex)?.segmentId !== segment.segmentId
+                        )
+                        const isSegmentStart = segment && (
+                          roomIndex === 0 || 
+                          getSegmentForCellRooms(slot.hour, slot.minute, roomIndex - 1)?.segmentId !== segment.segmentId
+                        )
+                        const isSegmentEnd = segment && (
+                          roomIndex === TOTAL_ROOMS - 1 || 
+                          getSegmentForCellRooms(slot.hour, slot.minute, roomIndex + 1)?.segmentId !== segment.segmentId
+                        )
+                        const isSegmentBottom = segment && (
+                          timeIndex === timeSlots.length - 1 ||
+                          getSegmentForCellRooms(timeSlots[timeIndex + 1].hour, timeSlots[timeIndex + 1].minute, roomIndex)?.segmentId !== segment.segmentId
+                        )
                     
-                    // Si cette cellule fait partie d'un segment mais n'est pas le début, ne pas la rendre
-                    const isPartOfSegment = segment && !(isSegmentStart && isSegmentTop)
-                    if (isPartOfSegment) return null
-                    
-                    const gridColumn = TOTAL_SLOTS + roomIndex + 2 // +2 car colonne 1 = Heure
-                    const gridRow = timeIndex + 1
+                        // Si cette cellule fait partie d'un segment mais n'est pas le début, ne pas la rendre
+                        const isPartOfSegment = segment && !(isSegmentStart && isSegmentTop)
+                        if (isPartOfSegment) return null
+                        
+                        const gridColumn = roomIndex + 2 // +2 car colonne 1 = Heure
+                        const gridRow = timeIndex + 1
                     
                     // Calculer les spans pour les segments
                     let colSpan = 1
@@ -1620,13 +1775,13 @@ export default function AdminPage() {
                         style={{
                           gridColumn: segment ? `${gridColumn} / ${gridColumn + colSpan}` : gridColumn,
                           gridRow: segment ? `${gridRow} / ${gridRow + rowSpan}` : gridRow,
-                          backgroundColor: segment ? (booking.color || '#22c55e') : 'transparent',
+                          backgroundColor: segment && booking ? (booking.color || '#22c55e') : 'transparent',
                           // Afficher les bordures seulement sur les créneaux de 30 minutes (0 et 30)
                           // Supprimer les bordures des créneaux de 15 minutes (15 et 45)
-                          borderTop: (slot.minute === 15 || slot.minute === 45) ? 'none' : `2px solid ${segment ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
-                          borderBottom: (slot.minute === 15 || slot.minute === 45 || (timeSlots[timeIndex + 1]?.minute === 15 || timeSlots[timeIndex + 1]?.minute === 45)) ? 'none' : `2px solid ${segment ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
-                          borderLeft: `2px solid ${segment ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
-                          borderRight: `2px solid ${segment ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
+                          borderTop: (slot.minute === 15 || slot.minute === 45) ? 'none' : `2px solid ${segment && booking ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
+                          borderBottom: (slot.minute === 15 || slot.minute === 45 || (timeSlots[timeIndex + 1]?.minute === 15 || timeSlots[timeIndex + 1]?.minute === 45)) ? 'none' : `2px solid ${segment && booking ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
+                          borderLeft: `2px solid ${segment && booking ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
+                          borderRight: `2px solid ${segment && booking ? (booking.color || (isDark ? '#4ade80' : '#16a34a')) : (isDark ? '#374151' : '#e5e7eb')}`,
                         }}
                         title={booking ? `${booking.customer_first_name} ${booking.customer_last_name} - ${booking.participants_count} pers.` : ''}
                       >
@@ -1649,6 +1804,8 @@ export default function AdminPage() {
                 </Fragment>
               )
             })}
+              </div>
+            </div>
           </div>
         </div>
       </main>
