@@ -137,6 +137,7 @@ export default function AdminPage() {
     isOverbooked: boolean
     overbookedCount: number
     slotsOver: number // Nombre de slots en surplus
+    totalSlotsUsed: number // Nombre total de slots utilisés
   }
 
   // Constantes configurables
@@ -165,7 +166,9 @@ export default function AdminPage() {
       timeSlotEnd.setMinutes(timeSlotEnd.getMinutes() + SLOT_DURATION)
 
       // Calculer totalParticipants = somme des participants actifs sur cette tranche
+      // Calculer totalSlotsUsed = somme des slots utilisés pour cette tranche
       let totalParticipants = 0
+      let totalSlotsUsed = 0
       for (const booking of bookings) {
         if (booking.type !== 'GAME' && booking.type !== 'EVENT') continue
         // Les EVENT bloquent aussi le temps de jeu, même s'ils ont une salle
@@ -175,6 +178,7 @@ export default function AdminPage() {
         // Vérifier si ce booking est actif sur cette tranche
         if (bookingStart < timeSlotEnd && bookingEnd > timeSlotStart) {
           totalParticipants += booking.participants_count
+          totalSlotsUsed += Math.ceil(booking.participants_count / MAX_PLAYERS_PER_SLOT)
         }
       }
 
@@ -193,7 +197,8 @@ export default function AdminPage() {
         capacity,
         isOverbooked,
         overbookedCount,
-        slotsOver: overSlots
+        slotsOver: overSlots,
+        totalSlotsUsed
       })
     }
 
@@ -1689,9 +1694,9 @@ export default function AdminPage() {
                       {obData && obData.totalParticipants > 0 && (
                         <span className="text-xs font-bold">
                           {obData.isOverbooked ? (
-                            `+${obData.slotsOver}S/${obData.overbookedCount}P`
+                            `${obData.slotsOver}/${obData.totalParticipants}P`
                           ) : (
-                            `${obData.totalParticipants}`
+                            `${obData.totalSlotsUsed}/${obData.totalParticipants}P`
                           )}
                         </span>
                       )}
