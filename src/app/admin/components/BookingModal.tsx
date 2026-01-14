@@ -869,68 +869,60 @@ export function BookingModal({
           </div>
 
           {/* Type de réservation + Couleur */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Type de réservation
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setBookingType('GAME')}
-                  className={`p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${
-                    bookingType === 'GAME'
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <Gamepad2 className={`w-6 h-6 ${bookingType === 'GAME' ? 'text-blue-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-                  <span className={`font-medium ${bookingType === 'GAME' ? 'text-blue-500' : isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Game
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBookingType('EVENT')}
-                  className={`p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${
-                    bookingType === 'EVENT'
-                      ? 'border-green-500 bg-green-500/10'
-                      : isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <PartyPopper className={`w-6 h-6 ${bookingType === 'EVENT' ? 'text-green-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-                  <span className={`font-medium ${bookingType === 'EVENT' ? 'text-green-500' : isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Event
-                  </span>
-                </button>
-              </div>
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              Type de réservation
+            </label>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <button
+                type="button"
+                onClick={() => setBookingType('GAME')}
+                className={`p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                  bookingType === 'GAME'
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Gamepad2 className={`w-6 h-6 ${bookingType === 'GAME' ? 'text-blue-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                <span className={`font-medium ${bookingType === 'GAME' ? 'text-blue-500' : isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Game
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBookingType('EVENT')}
+                className={`p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                  bookingType === 'EVENT'
+                    ? 'border-green-500 bg-green-500/10'
+                    : isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <PartyPopper className={`w-6 h-6 ${bookingType === 'EVENT' ? 'text-green-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                <span className={`font-medium ${bookingType === 'EVENT' ? 'text-green-500' : isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Event
+                </span>
+              </button>
             </div>
 
-            {/* Sélecteur de couleur */}
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <Palette className="w-4 h-4 inline mr-1" />
-                Couleur de l'événement
-              </label>
-              <div className="flex flex-wrap gap-2">
+            {/* Sélecteur de couleur - en dessous, sur une ligne */}
+            <div className="flex items-center gap-3">
+              <Palette className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+              <div className="flex items-center gap-2 flex-1">
                 {COLORS.map((c) => (
                   <button
                     key={c.value}
                     type="button"
                     onClick={() => setColor(c.value)}
-                    className={`w-10 h-10 rounded-lg transition-all border-2 ${
+                    className={`w-7 h-7 rounded-full transition-all border-2 flex-shrink-0 ${
                       color === c.value 
-                        ? `${isDark ? 'ring-2 ring-offset-2 ring-white ring-offset-gray-800' : 'ring-2 ring-offset-2 ring-gray-800 ring-offset-white'} scale-110 border-white shadow-lg` 
-                        : `${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-300 hover:border-gray-400'} hover:scale-105`
+                        ? `${isDark ? 'ring-2 ring-offset-2 ring-white ring-offset-gray-800' : 'ring-2 ring-offset-2 ring-gray-800 ring-offset-white'} scale-125 border-white shadow-lg` 
+                        : `${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-300 hover:border-gray-400'} hover:scale-110`
                     }`}
                     style={{ backgroundColor: c.value }}
                     title={c.name}
                   />
                 ))}
               </div>
-              <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Couleur par défaut: {bookingType === 'GAME' ? 'Bleu' : 'Vert'} (modifiable)
-              </p>
             </div>
           </div>
 
