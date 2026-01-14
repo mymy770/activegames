@@ -108,7 +108,7 @@ export function SettingsModal({
           .update({ 
             capacity: newCapacity,
             name: newName || `Salle ${room.sort_order + 1}` // Valeur par défaut si vide
-          })
+          } as any)
           .eq('id', room.id)
 
         if (roomError) {
