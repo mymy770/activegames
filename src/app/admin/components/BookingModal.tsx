@@ -58,6 +58,8 @@ export function BookingModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showOverCapacityConfirm, setShowOverCapacityConfirm] = useState(false)
+  const [pendingRoomId, setPendingRoomId] = useState<string | null | undefined>(null)
 
   // Date locale (modifiable)
   const [localDate, setLocalDate] = useState(selectedDate)
@@ -340,38 +342,8 @@ export function BookingModal({
   // Vérifier si la capacité est dépassée
   const isOverCapacity = parsedParticipants > TOTAL_CAPACITY
 
-  // Soumettre le formulaire
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    // Validations
-    if (!firstName.trim()) {
-      setError('Le prénom est requis')
-      return
-    }
-    
-    if (!phone.trim()) {
-      setError('Le numéro de téléphone est requis')
-      return
-    }
-    if (!phone.trim()) {
-      setError('Le numéro de téléphone est requis')
-      return
-    }
-    if (parsedParticipants < 1) {
-      setError('Le nombre de participants doit être au moins 1')
-      return
-    }
-    if (isOverCapacity) {
-      setError(`Capacité maximale dépassée (${TOTAL_CAPACITY} joueurs max)`)
-      return
-    }
-    if (parsedDuration < 15) {
-      setError('La durée minimum est de 15 minutes')
-      return
-    }
-
+  // Fonction interne pour soumettre avec une salle spécifique
+  const submitWithRoom = async (eventRoomId: string | null | undefined) => {
     setLoading(true)
 
     try {
@@ -388,8 +360,6 @@ export function BookingModal({
       let endDate = gameEndDate
 
       // Si événement, calculer les dates de la salle (automatique pour EVENT)
-      let eventRoomId: string | null | undefined = editingBooking?.event_room_id || null
-      
       if (bookingType === 'EVENT') {
         const roomStartDate = new Date(localDate)
         roomStartDate.setHours(roomStartHour, roomStartMinute, 0, 0)
@@ -401,16 +371,6 @@ export function BookingModal({
         // Prendre les dates les plus larges
         if (roomStartDate < gameStartDate) startDate = roomStartDate
         if (roomEndDate > gameEndDate) endDate = roomEndDate
-
-        // Assigner automatiquement la meilleure salle disponible
-        if (findBestAvailableRoom && !editingBooking) {
-          eventRoomId = findBestAvailableRoom(parsedParticipants, roomStartDate, roomEndDate)
-          if (!eventRoomId) {
-            setError('Aucune salle disponible pour cette période avec cette capacité.')
-            setLoading(false)
-            return
-          }
-        }
       }
 
       // Construire les slots (version simple - un seul slot continu)
@@ -474,6 +434,75 @@ export function BookingModal({
     } finally {
       setLoading(false)
     }
+  }
+
+  // Soumettre le formulaire
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    // Validations
+    if (!firstName.trim()) {
+      setError('Le prénom est requis')
+      return
+    }
+    
+    if (!phone.trim()) {
+      setError('Le numéro de téléphone est requis')
+      return
+    }
+    if (parsedParticipants < 1) {
+      setError('Le nombre de participants doit être au moins 1')
+      return
+    }
+    if (isOverCapacity) {
+      setError(`Capacité maximale dépassée (${TOTAL_CAPACITY} joueurs max)`)
+      return
+    }
+    if (parsedDuration < 15) {
+      setError('La durée minimum est de 15 minutes')
+      return
+    }
+
+    // Si événement, vérifier la salle
+    let eventRoomId: string | null | undefined = editingBooking?.event_room_id || null
+    
+    if (bookingType === 'EVENT' && findBestAvailableRoom) {
+      const roomStartDate = new Date(localDate)
+      roomStartDate.setHours(roomStartHour, roomStartMinute, 0, 0)
+
+      const { endHour: roomEndHour, endMinute: roomEndMinute } = calculateRoomEndTime()
+      const roomEndDate = new Date(localDate)
+      roomEndDate.setHours(roomEndHour, roomEndMinute, 0, 0)
+
+      const bestRoomId = findBestAvailableRoom(parsedParticipants, roomStartDate, roomEndDate)
+      
+      if (!bestRoomId) {
+        // Aucune salle disponible - over capacity
+        setPendingRoomId(editingBooking?.event_room_id || null)
+        setShowOverCapacityConfirm(true)
+        return
+      } else {
+        // Une salle convient - l'utiliser (même si différente de la salle actuelle)
+        eventRoomId = bestRoomId
+      }
+    }
+
+    // Soumettre avec la salle trouvée
+    await submitWithRoom(eventRoomId)
+  }
+
+  const handleOverCapacityConfirm = async () => {
+    setShowOverCapacityConfirm(false)
+    // Soumettre avec la salle actuelle (ou null)
+    await submitWithRoom(pendingRoomId)
+    setPendingRoomId(null)
+  }
+
+  const handleOverCapacityCancel = () => {
+    setShowOverCapacityConfirm(false)
+    setError('Réservation annulée. Veuillez réduire le nombre de participants ou choisir une autre période.')
+    setPendingRoomId(null)
   }
 
   const handleDeleteClick = () => {
@@ -1118,6 +1147,60 @@ export function BookingModal({
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmation d'over capacity */}
+      {showOverCapacityConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={handleOverCapacityCancel}
+          />
+
+          {/* Modal de confirmation */}
+          <div className={`relative w-full max-w-md mx-4 rounded-2xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="p-6">
+              <h3 className={`text-xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                ⚠️ Capacité insuffisante
+              </h3>
+              <p className={`mb-6 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Aucune salle disponible pour <strong>{parsedParticipants} participants</strong>.<br /><br />
+                La capacité maximale des salles disponibles est insuffisante.<br /><br />
+                Voulez-vous continuer quand même avec la salle actuelle (si elle existe) ?
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleOverCapacityCancel}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-lg ${
+                    isDark
+                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                      : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                  } disabled:opacity-50`}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOverCapacityConfirm}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      En cours...
+                    </>
+                  ) : (
+                    'Continuer quand même'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmation de suppression */}
       {showDeleteConfirm && (
