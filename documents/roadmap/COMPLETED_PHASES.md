@@ -452,7 +452,7 @@ src/i18n/locales/he.json (added roles translations)
 
 ### What was implemented:
 
-#### 1. Email System with Resend
+#### 1. Email System with Brevo (migrated from Resend)
 
 **Database Tables:**
 - `email_templates` - Stores email templates with:
@@ -593,8 +593,9 @@ src/i18n/locales/he.json (added settings translations)
 
 ### Environment Variables:
 ```
-RESEND_API_KEY=re_xxxxx
-RESEND_FROM_EMAIL=ActiveGames <noreply@activegames.co.il>
+BREVO_API_KEY=xkeysib-xxxxx
+BREVO_FROM_EMAIL=no-reply@activegames.co.il
+BREVO_FROM_NAME=ActiveGames
 ```
 
 ### Build Status:
@@ -605,7 +606,7 @@ RESEND_FROM_EMAIL=ActiveGames <noreply@activegames.co.il>
 ## Phase 2: CERTIFIED COMPLETE
 
 **All Phase 2 components implemented:**
-- ✅ Email system with Resend integration
+- ✅ Email system with Brevo integration (migrated from Resend)
 - ✅ Email templates (multi-language: EN/FR/HE)
 - ✅ Terms & Conditions templates (GAME vs EVENT)
 - ✅ Email logging and tracking

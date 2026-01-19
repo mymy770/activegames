@@ -1,9 +1,9 @@
 /**
  * Email Sender Utility
- * Utilise Resend pour envoyer des emails
+ * Utilise Brevo pour envoyer des emails
  */
 
-import { Resend } from 'resend'
+import * as Brevo from '@getbrevo/brevo'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { EmailLog, EmailTemplate, Booking, Branch, EmailLogInsert } from '@/lib/supabase/types'
 import { logEmailSent } from '@/lib/activity-logger'
@@ -14,6 +14,19 @@ const getAdminSupabase = () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+// Configuration Brevo
+const getBrevoClient = () => {
+  const apiKey = process.env.BREVO_API_KEY
+
+  if (!apiKey) {
+    throw new Error('BREVO_API_KEY not configured in environment variables')
+  }
+
+  const apiInstance = new Brevo.TransactionalEmailsApi()
+  apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey)
+  return apiInstance
 }
 
 // Types pour les variables du template
@@ -36,17 +49,6 @@ export interface BookingEmailVariables {
   logo_lasercity_url: string
   current_year: string
   terms_conditions: string // HTML content of terms & conditions
-}
-
-// Configuration Resend
-const getResendClient = () => {
-  const apiKey = process.env.RESEND_API_KEY
-
-  if (!apiKey) {
-    throw new Error('RESEND_API_KEY not configured in environment variables')
-  }
-
-  return new Resend(apiKey)
 }
 
 // Remplace les variables {{variable}} dans le template
@@ -168,27 +170,27 @@ export async function sendEmail(params: {
   console.log('[EMAIL sendEmail] Email log created with id:', emailLog?.id)
 
   try {
-    console.log('[EMAIL sendEmail] Getting Resend client...')
-    const resend = getResendClient()
+    console.log('[EMAIL sendEmail] Getting Brevo client...')
+    const brevoClient = getBrevoClient()
 
-    // En mode test Resend, on ne peut envoyer qu'à des emails vérifiés
-    // Utiliser onboarding@resend.dev comme from par défaut
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'ActiveGames <onboarding@resend.dev>'
-    console.log('[EMAIL sendEmail] Sending via Resend - from:', fromEmail, 'to:', params.to)
+    // Configuration de l'email avec Brevo
+    const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@activegames.co.il'
+    const fromName = process.env.BREVO_FROM_NAME || 'ActiveGames'
+    console.log('[EMAIL sendEmail] Sending via Brevo - from:', fromEmail, 'to:', params.to)
 
-    const { data, error: sendError } = await resend.emails.send({
-      from: fromEmail,
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-    })
+    const sendSmtpEmail = new Brevo.SendSmtpEmail()
+    sendSmtpEmail.sender = { email: fromEmail, name: fromName }
+    sendSmtpEmail.to = [{ email: params.to, name: params.toName || params.to }]
+    sendSmtpEmail.subject = params.subject
+    sendSmtpEmail.htmlContent = params.html
 
-    console.log('[EMAIL sendEmail] Resend response - data:', data, 'error:', sendError)
+    const response = await brevoClient.sendTransacEmail(sendSmtpEmail)
 
-    // Resend retourne { data: null, error: {...} } en cas d'erreur, pas de throw
-    if (sendError || !data) {
-      const errorMsg = sendError?.message || 'Unknown Resend error'
-      throw new Error(errorMsg)
+    console.log('[EMAIL sendEmail] Brevo response:', response)
+
+    // Vérifier le succès (Brevo retourne un messageId si succès)
+    if (!response?.body?.messageId) {
+      throw new Error('Brevo did not return a messageId')
     }
 
     // Mettre à jour le log avec succès
