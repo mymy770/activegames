@@ -1,0 +1,403 @@
+/**
+ * Email Sender Utility
+ * Utilise Resend pour envoyer des emails
+ */
+
+import { Resend } from 'resend'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import type { EmailLog, EmailTemplate, Booking, Branch, EmailLogInsert } from '@/lib/supabase/types'
+
+// Client Supabase admin pour les opérations d'email (pas besoin d'auth utilisateur)
+const getAdminSupabase = () => {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+// Types pour les variables du template
+export interface BookingEmailVariables {
+  booking_reference: string
+  booking_date: string
+  booking_time: string
+  participants: number
+  booking_type: string
+  game_type: string // "Laser City", "Active Games", ou "Mix"
+  branch_name: string
+  branch_address: string
+  branch_phone: string
+  branch_email: string
+  client_name: string
+  client_email: string
+  logo_activegames_url: string
+  logo_lasercity_url: string
+  current_year: string
+}
+
+// Configuration Resend
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY
+
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY not configured in environment variables')
+  }
+
+  return new Resend(apiKey)
+}
+
+// Remplace les variables {{variable}} dans le template
+export function replaceTemplateVariables(template: string, variables: Record<string, string | number>): string {
+  let result = template
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`{{${key}}}`, 'g')
+    result = result.replace(regex, String(value))
+  }
+  return result
+}
+
+// Génère un aperçu du body (premiers 200 caractères sans HTML)
+function generateBodyPreview(html: string): string {
+  // Supprime les tags HTML
+  const text = html.replace(/<[^>]*>/g, ' ')
+  // Supprime les espaces multiples
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+  // Retourne les premiers 200 caractères
+  return cleaned.substring(0, 200)
+}
+
+// Envoie un email et log le résultat
+export async function sendEmail(params: {
+  to: string
+  toName?: string
+  subject: string
+  html: string
+  templateId?: string
+  templateCode?: string
+  entityType?: 'booking' | 'order' | 'contact'
+  entityId?: string
+  branchId?: string
+  triggeredBy?: string
+  metadata?: Record<string, unknown>
+}): Promise<{ success: boolean; emailLogId?: string; error?: string }> {
+  console.log('[EMAIL sendEmail] === START ===')
+  console.log('[EMAIL sendEmail] to:', params.to)
+  console.log('[EMAIL sendEmail] subject:', params.subject)
+  console.log('[EMAIL sendEmail] entityType:', params.entityType)
+  console.log('[EMAIL sendEmail] entityId:', params.entityId)
+  console.log('[EMAIL sendEmail] branchId:', params.branchId)
+
+  const supabase = getAdminSupabase()
+
+  // Créer le log initial avec status 'pending'
+  const emailLogData: EmailLogInsert = {
+    recipient_email: params.to,
+    recipient_name: params.toName || null,
+    template_id: params.templateId || null,
+    template_code: params.templateCode || null,
+    subject: params.subject,
+    body_preview: generateBodyPreview(params.html),
+    body_html: params.html,
+    entity_type: params.entityType || null,
+    entity_id: params.entityId || null,
+    branch_id: params.branchId || null,
+    attachments: [],
+    status: 'pending',
+    error_message: null,
+    metadata: (params.metadata || {}) as unknown as import('@/lib/supabase/types').Json,
+    sent_at: null,
+    triggered_by: params.triggeredBy || null,
+  }
+
+  console.log('[EMAIL sendEmail] Creating email log in database...')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: emailLog, error: logError } = await (supabase as any)
+    .from('email_logs')
+    .insert(emailLogData)
+    .select()
+    .single()
+
+  if (logError) {
+    console.error('[EMAIL sendEmail] Failed to create email log:', logError)
+    return { success: false, error: 'Failed to create email log' }
+  }
+  console.log('[EMAIL sendEmail] Email log created with id:', emailLog?.id)
+
+  try {
+    console.log('[EMAIL sendEmail] Getting Resend client...')
+    const resend = getResendClient()
+
+    // En mode test Resend, on ne peut envoyer qu'à des emails vérifiés
+    // Utiliser onboarding@resend.dev comme from par défaut
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'ActiveGames <onboarding@resend.dev>'
+    console.log('[EMAIL sendEmail] Sending via Resend - from:', fromEmail, 'to:', params.to)
+
+    const { data, error: sendError } = await resend.emails.send({
+      from: fromEmail,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    })
+
+    console.log('[EMAIL sendEmail] Resend response - data:', data, 'error:', sendError)
+
+    // Resend retourne { data: null, error: {...} } en cas d'erreur, pas de throw
+    if (sendError || !data) {
+      const errorMsg = sendError?.message || 'Unknown Resend error'
+      throw new Error(errorMsg)
+    }
+
+    // Mettre à jour le log avec succès
+    console.log('[EMAIL sendEmail] Updating email log to sent...')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('email_logs')
+      .update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+      })
+      .eq('id', emailLog.id)
+
+    console.log('[EMAIL sendEmail] === SUCCESS ===')
+    return { success: true, emailLogId: emailLog.id }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[EMAIL sendEmail] Error caught:', errorMessage)
+
+    // Mettre à jour le log avec l'erreur
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('email_logs')
+      .update({
+        status: 'failed',
+        error_message: errorMessage,
+      })
+      .eq('id', emailLog.id)
+
+    console.error('[EMAIL sendEmail] === FAILED ===')
+    return { success: false, emailLogId: emailLog.id, error: errorMessage }
+  }
+}
+
+// Envoie un email de confirmation de réservation
+export async function sendBookingConfirmationEmail(params: {
+  booking: Booking
+  branch: Branch
+  triggeredBy?: string
+  locale?: string // 'fr' | 'en' | 'he'
+}): Promise<{ success: boolean; emailLogId?: string; error?: string }> {
+  const { booking, branch, triggeredBy, locale = 'en' } = params
+
+  console.log('[EMAIL CONFIRMATION] === START ===')
+  console.log('[EMAIL CONFIRMATION] booking.id:', booking.id)
+  console.log('[EMAIL CONFIRMATION] booking.reference_code:', booking.reference_code)
+  console.log('[EMAIL CONFIRMATION] booking.customer_email:', booking.customer_email)
+  console.log('[EMAIL CONFIRMATION] branch.id:', branch.id)
+  console.log('[EMAIL CONFIRMATION] locale:', locale)
+  console.log('[EMAIL CONFIRMATION] triggeredBy:', triggeredBy)
+
+  // Vérifier que le client a un email
+  if (!booking.customer_email) {
+    console.log('[EMAIL CONFIRMATION] No customer email, skipping')
+    return { success: false, error: 'Customer has no email address' }
+  }
+
+  const supabase = getAdminSupabase()
+
+  // Déterminer le code du template selon la langue
+  const templateCode = `booking_confirmation_${locale}`
+  console.log('[EMAIL CONFIRMATION] Looking for template:', templateCode)
+
+  // Récupérer le template de confirmation dans la bonne langue
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let { data: template, error: templateError } = await (supabase as any)
+    .from('email_templates')
+    .select('*')
+    .eq('code', templateCode)
+    .eq('is_active', true)
+    .single() as { data: EmailTemplate | null; error: unknown }
+
+  console.log('[EMAIL CONFIRMATION] Template fetch result - found:', !!template, 'error:', templateError)
+
+  // Fallback vers anglais si le template n'existe pas dans cette langue
+  if (templateError || !template) {
+    console.log('[EMAIL CONFIRMATION] Trying fallback to booking_confirmation_en...')
+    const { data: fallbackTemplate, error: fallbackError } = await supabase
+      .from('email_templates')
+      .select('*')
+      .eq('code', 'booking_confirmation_en')
+      .eq('is_active', true)
+      .single()
+
+    console.log('[EMAIL CONFIRMATION] Fallback result - found:', !!fallbackTemplate, 'error:', fallbackError)
+    template = fallbackTemplate as EmailTemplate | null
+  }
+
+  if (!template) {
+    console.error('[EMAIL CONFIRMATION] Template not found for locale:', locale)
+    return { success: false, error: 'Email template not found' }
+  }
+  console.log('[EMAIL CONFIRMATION] Using template:', template.code, 'id:', template.id)
+
+  // Déterminer la locale pour le formatage des dates
+  const dateLocale = locale === 'he' ? 'he-IL' : locale === 'fr' ? 'fr-FR' : 'en-US'
+
+  // Formater la date et l'heure selon la locale
+  const bookingDate = new Date(booking.start_datetime)
+  const formattedDate = bookingDate.toLocaleDateString(dateLocale, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+  const formattedTime = bookingDate.toLocaleTimeString(dateLocale, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  // Déterminer l'URL de base pour les logos
+  // En production, utiliser le domaine réel
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://activegames.co.il'
+
+  // Traduire le type de booking selon la langue
+  const getBookingTypeLabel = (type: string, lang: string) => {
+    if (type === 'GAME') {
+      return lang === 'fr' ? 'Partie de jeux' : lang === 'he' ? 'משחק' : 'Game'
+    }
+    return lang === 'fr' ? 'Événement' : lang === 'he' ? 'אירוע' : 'Event'
+  }
+
+  // Récupérer les game_sessions pour déterminer le type de jeu (Laser/Active/Mix)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: gameSessions } = await (supabase as any)
+    .from('game_sessions')
+    .select('game_area')
+    .eq('booking_id', booking.id)
+
+  // Déterminer le type de jeu basé sur les sessions
+  const getGameTypeLabel = (sessions: Array<{ game_area: string }> | null, lang: string) => {
+    if (!sessions || sessions.length === 0) {
+      return '' // Pas de sessions, ne pas afficher
+    }
+
+    const hasLaser = sessions.some(s => s.game_area === 'LASER')
+    const hasActive = sessions.some(s => s.game_area === 'ACTIVE')
+
+    if (hasLaser && hasActive) {
+      return 'Mix Active + Laser'
+    } else if (hasLaser) {
+      return 'Laser City'
+    } else if (hasActive) {
+      return 'Active Games'
+    }
+    return ''
+  }
+
+  // Préparer les variables
+  const variables: BookingEmailVariables = {
+    booking_reference: booking.reference_code,
+    booking_date: formattedDate,
+    booking_time: formattedTime,
+    participants: booking.participants_count,
+    booking_type: getBookingTypeLabel(booking.type, locale),
+    game_type: getGameTypeLabel(gameSessions, locale),
+    branch_name: branch.name,
+    branch_address: branch.address,
+    branch_phone: branch.phone || '',
+    branch_email: '', // À ajouter si disponible dans la table branches
+    client_name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+    client_email: booking.customer_email,
+    logo_activegames_url: `${baseUrl}/images/logo-activegames.png`,
+    logo_lasercity_url: `${baseUrl}/images/logo_laser_city.png`,
+    current_year: new Date().getFullYear().toString(),
+  }
+
+  // Générer le sujet et le body
+  const subject = replaceTemplateVariables(template.subject_template, variables as unknown as Record<string, string | number>)
+  const html = replaceTemplateVariables(template.body_template, variables as unknown as Record<string, string | number>)
+
+  // Envoyer l'email
+  return sendEmail({
+    to: booking.customer_email,
+    toName: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+    subject,
+    html,
+    templateId: template.id,
+    templateCode: template.code,
+    entityType: 'booking',
+    entityId: booking.id,
+    branchId: branch.id,
+    triggeredBy,
+    metadata: {
+      booking_reference: booking.reference_code,
+      booking_type: booking.type,
+      participants: booking.participants_count,
+    },
+  })
+}
+
+// Renvoyer un email depuis un log existant
+export async function resendEmail(emailLogId: string, triggeredBy?: string): Promise<{ success: boolean; newEmailLogId?: string; error?: string }> {
+  const supabase = getAdminSupabase()
+
+  // Récupérer le log original
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: originalLog, error } = await (supabase as any)
+    .from('email_logs')
+    .select('*')
+    .eq('id', emailLogId)
+    .single() as { data: EmailLog | null; error: unknown }
+
+  if (error || !originalLog) {
+    return { success: false, error: 'Original email log not found' }
+  }
+
+  // Si on a un template, le récupérer pour avoir le body complet
+  let html = ''
+
+  if (originalLog.template_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: template } = await (supabase as any)
+      .from('email_templates')
+      .select('*')
+      .eq('id', originalLog.template_id)
+      .single() as { data: EmailTemplate | null }
+
+    if (template) {
+      // On devrait stocker les variables originales dans metadata pour pouvoir régénérer
+      // Pour l'instant, on utilise le body_preview (pas idéal)
+      html = template.body_template
+
+      // Si on a des metadata avec les variables, les utiliser
+      if (originalLog.metadata && typeof originalLog.metadata === 'object') {
+        const metadata = originalLog.metadata as Record<string, unknown>
+        for (const [key, value] of Object.entries(metadata)) {
+          const regex = new RegExp(`{{${key}}}`, 'g')
+          html = html.replace(regex, String(value))
+        }
+      }
+    }
+  }
+
+  if (!html) {
+    return { success: false, error: 'Cannot regenerate email content' }
+  }
+
+  // Créer un nouveau log et envoyer
+  return sendEmail({
+    to: originalLog.recipient_email,
+    toName: originalLog.recipient_name || undefined,
+    subject: originalLog.subject,
+    html,
+    templateId: originalLog.template_id || undefined,
+    templateCode: originalLog.template_code || undefined,
+    entityType: originalLog.entity_type as 'booking' | 'order' | 'contact' | undefined,
+    entityId: originalLog.entity_id || undefined,
+    branchId: originalLog.branch_id || undefined,
+    triggeredBy,
+    metadata: {
+      ...((originalLog.metadata as Record<string, unknown>) || {}),
+      resent_from: emailLogId,
+    },
+  })
+}

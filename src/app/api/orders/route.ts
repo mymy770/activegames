@@ -19,8 +19,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createIsraelDateTime } from '@/lib/dates'
 import { validateIsraeliPhone, formatIsraeliPhone } from '@/lib/validation'
-import { logOrderAction, logBookingAction, getClientIpFromHeaders } from '@/lib/activity-logger'
-import type { EventRoom, LaserRoom, UserRole } from '@/lib/supabase/types'
+import { logOrderAction, logBookingAction, logContactAction, getClientIpFromHeaders } from '@/lib/activity-logger'
+import { sendBookingConfirmationEmail } from '@/lib/email-sender'
+import type { EventRoom, LaserRoom, UserRole, Booking, Branch } from '@/lib/supabase/types'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -123,8 +124,11 @@ async function findOrCreateContact(
   lastName: string | null,
   phone: string,
   email: string | null,
-  notes: string | null
-): Promise<string> {
+  notes: string | null,
+  ipAddress?: string
+): Promise<{ contactId: string; wasCreated: boolean }> {
+
+  console.log("[ORDER API] findOrCreateContact - phone:", phone, "branchId:", branchId)
 
   // Chercher un contact existant par téléphone
   const { data: existing } = await supabase
@@ -135,8 +139,11 @@ async function findOrCreateContact(
     .single()
 
   if (existing) {
-    return existing.id
+    console.log("[ORDER API] Existing contact found:", existing.id)
+    return { contactId: existing.id, wasCreated: false }
   }
+
+  console.log("[ORDER API] Creating new contact...")
 
   // Créer un nouveau contact
   const { data: newContact, error } = await supabase
@@ -157,7 +164,25 @@ async function findOrCreateContact(
     throw new Error('Failed to create contact')
   }
 
-  return newContact.id
+  // Logger la création du contact
+  const contactName = `${firstName} ${lastName || ''}`.trim()
+  await logContactAction({
+    userId: null,
+    userRole: 'agent' as UserRole,
+    userName: 'Website',
+    action: 'created',
+    contactId: newContact.id,
+    contactName,
+    branchId,
+    details: {
+      source: 'website',
+      phone,
+      email
+    },
+    ipAddress
+  })
+
+  return { contactId: newContact.id, wasCreated: true }
 }
 
 /**
@@ -172,8 +197,10 @@ async function findOrCreateContact(
  * 5. Créer l'order
  */
 export async function POST(request: NextRequest) {
+  console.log('[ORDER API] POST called')
   try {
     const body = await request.json()
+    console.log('[ORDER API] Body received:', { order_type: body.order_type, customer_email: body.customer_email })
 
     // Validation
     const requiredFields = [
@@ -210,7 +237,8 @@ export async function POST(request: NextRequest) {
       game_area,
       number_of_games = 1,
       event_type = null, // event_active, event_laser, event_mix
-      event_celebrant_age = null
+      event_celebrant_age = null,
+      locale = 'en' // 'fr' | 'en' | 'he' - langue pour l'email de confirmation
     } = body
 
     // Récupérer l'adresse IP pour le logging
@@ -228,13 +256,14 @@ export async function POST(request: NextRequest) {
     const formattedPhone = formatIsraeliPhone(customer_phone)
 
     // 1. Trouver ou créer le contact
-    const contactId = await findOrCreateContact(
+    const { contactId } = await findOrCreateContact(
       branch_id,
       customer_first_name,
       customer_last_name || null,
       formattedPhone,
       customer_email || null,
-      customer_notes || null
+      customer_notes || null,
+      ipAddress
     )
 
     // 2. Récupérer les settings
@@ -677,6 +706,72 @@ export async function POST(request: NextRequest) {
         ipAddress
       })
 
+      // Envoyer l'email de confirmation si le client a un email
+      console.log('[ORDER API EVENT] === EMAIL SECTION START ===')
+      console.log('[ORDER API EVENT] customer_email:', customer_email)
+      console.log('[ORDER API EVENT] booking.id:', booking.id)
+      console.log('[ORDER API EVENT] referenceCode:', referenceCode)
+
+      if (customer_email) {
+        console.log('[ORDER API EVENT] Email provided, fetching branch...')
+        // Récupérer la branche pour l'email
+        const { data: branch, error: branchError } = await supabase
+          .from('branches')
+          .select('*')
+          .eq('id', branch_id)
+          .single()
+
+        console.log('[ORDER API EVENT] Branch fetch result - name:', branch?.name, 'error:', branchError?.message)
+
+        if (branch) {
+          // Créer un objet booking complet pour l'envoi d'email
+          const bookingForEmail: Booking = {
+            id: booking.id,
+            branch_id,
+            type: 'EVENT',
+            status: 'CONFIRMED',
+            start_datetime: roomStartDateTime.toISOString(),
+            end_datetime: roomEndDateTime.toISOString(),
+            game_start_datetime: gameStartDateTime.toISOString(),
+            game_end_datetime: gameEndDateTime.toISOString(),
+            participants_count,
+            event_room_id: eventRoomId,
+            customer_first_name,
+            customer_last_name: customer_last_name || '',
+            customer_phone: formattedPhone,
+            customer_email,
+            customer_notes_at_booking: eventNotes,
+            reference_code: referenceCode,
+            total_price: null,
+            notes: null,
+            color,
+            primary_contact_id: contactId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            cancelled_at: null,
+            cancelled_reason: null
+          }
+
+          console.log('[ORDER API EVENT] Calling sendBookingConfirmationEmail with locale:', locale)
+          // Envoyer l'email (attendre pour que le status soit mis à jour)
+          try {
+            const emailResult = await sendBookingConfirmationEmail({
+              booking: bookingForEmail,
+              branch: branch as Branch,
+              locale
+            })
+            console.log('[ORDER API EVENT] Email result:', emailResult)
+          } catch (err) {
+            console.error('[ORDER API EVENT] Email exception:', err)
+          }
+        } else {
+          console.log('[ORDER API EVENT] Branch not found, skipping email')
+        }
+      } else {
+        console.log('[ORDER API EVENT] No customer email provided, skipping email')
+      }
+      console.log('[ORDER API EVENT] === EMAIL SECTION END ===')
+
       return NextResponse.json({
         success: true,
         order_id: order.id,
@@ -1098,6 +1193,72 @@ export async function POST(request: NextRequest) {
       },
       ipAddress
     })
+
+    // Envoyer l'email de confirmation si le client a un email
+    console.log('[ORDER API GAME] === EMAIL SECTION START ===')
+    console.log('[ORDER API GAME] customer_email:', customer_email)
+    console.log('[ORDER API GAME] booking.id:', booking.id)
+    console.log('[ORDER API GAME] referenceCode:', referenceCode)
+
+    if (customer_email) {
+      console.log('[ORDER API GAME] Email provided, fetching branch...')
+      // Récupérer la branche pour l'email
+      const { data: branch, error: branchError } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('id', branch_id)
+        .single()
+
+      console.log('[ORDER API GAME] Branch fetch result - name:', branch?.name, 'error:', branchError?.message)
+
+      if (branch) {
+        // Créer un objet booking complet pour l'envoi d'email
+        const bookingForEmail: Booking = {
+          id: booking.id,
+          branch_id,
+          type: order_type,
+          status: 'CONFIRMED',
+          start_datetime: startDateTime.toISOString(),
+          end_datetime: endDateTime.toISOString(),
+          game_start_datetime: startDateTime.toISOString(),
+          game_end_datetime: endDateTime.toISOString(),
+          participants_count,
+          event_room_id: null,
+          customer_first_name,
+          customer_last_name: customer_last_name || '',
+          customer_phone: formattedPhone,
+          customer_email,
+          customer_notes_at_booking: customer_notes || null,
+          reference_code: referenceCode,
+          total_price: null,
+          notes: null,
+          color,
+          primary_contact_id: contactId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          cancelled_at: null,
+          cancelled_reason: null
+        }
+
+        console.log('[ORDER API GAME] Calling sendBookingConfirmationEmail with locale:', locale)
+        // Envoyer l'email (attendre pour que le status soit mis à jour)
+        try {
+          const emailResult = await sendBookingConfirmationEmail({
+            booking: bookingForEmail,
+            branch: branch as Branch,
+            locale
+          })
+          console.log('[ORDER API GAME] Email result:', emailResult)
+        } catch (err) {
+          console.error('[ORDER API GAME] Email exception:', err)
+        }
+      } else {
+        console.log('[ORDER API GAME] Branch not found, skipping email')
+      }
+    } else {
+      console.log('[ORDER API GAME] No customer email provided, skipping email')
+    }
+    console.log('[ORDER API GAME] === EMAIL SECTION END ===')
 
     return NextResponse.json({
       success: true,
