@@ -1101,6 +1101,7 @@
         "booking_updated": "Booking updated",
         "booking_cancelled": "Booking cancelled",
         "booking_deleted": "Booking deleted",
+        "order_created": "Order created",
         "order_confirmed": "Order confirmed",
         "order_cancelled": "Order cancelled",
         "order_deleted": "Order deleted",

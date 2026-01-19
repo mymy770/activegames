@@ -1222,6 +1222,7 @@
         "booking_updated": "הזמנה עודכנה",
         "booking_cancelled": "הזמנה בוטלה",
         "booking_deleted": "הזמנה נמחקה",
+        "order_created": "הזמנה נוצרה",
         "order_confirmed": "הזמנה אושרה",
         "order_cancelled": "הזמנה בוטלה",
         "order_deleted": "הזמנה נמחקה",

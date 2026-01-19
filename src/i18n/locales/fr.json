@@ -1158,6 +1158,7 @@
         "booking_updated": "Reservation modifiee",
         "booking_cancelled": "Reservation annulee",
         "booking_deleted": "Reservation supprimee",
+        "order_created": "Commande creee",
         "order_confirmed": "Commande confirmee",
         "order_cancelled": "Commande annulee",
         "order_deleted": "Commande supprimee",
