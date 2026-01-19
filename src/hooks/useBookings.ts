@@ -3,6 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from './useRealtimeSubscription'
+import {
+  getCachedBookings,
+  setCachedBookings,
+  updateCachedBooking,
+  removeCachedBooking,
+  setLastSyncTime,
+} from '@/lib/cache'
 import type {
   Booking,
   BookingSlot,
@@ -62,6 +69,19 @@ export function useBookings(branchId: string | null, date?: string) {
   const [error, setError] = useState<string | null>(null)
   const lastFetchKeyRef = useRef<string | null>(null)
   const isFetchingRef = useRef(false)
+  const initialCacheLoadedRef = useRef(false)
+
+  // Charger depuis le cache au démarrage (affichage instantané)
+  useEffect(() => {
+    if (!branchId || !date || initialCacheLoadedRef.current) return
+
+    const cached = getCachedBookings(branchId, date)
+    if (cached && cached.length > 0) {
+      setBookings(cached)
+      setLoading(false) // Affichage instantané !
+      initialCacheLoadedRef.current = true
+    }
+  }, [branchId, date])
 
   // Charger les réservations
   const fetchBookings = useCallback(async (force = false) => {
@@ -78,7 +98,12 @@ export function useBookings(branchId: string | null, date?: string) {
 
     const supabase = getClient()
     isFetchingRef.current = true
-    setLoading(true)
+
+    // Ne montrer le loading que si pas de cache
+    const cached = date ? getCachedBookings(branchId, date) : null
+    if (!cached || cached.length === 0) {
+      setLoading(true)
+    }
     setError(null)
 
     try {
@@ -220,6 +245,12 @@ export function useBookings(branchId: string | null, date?: string) {
       })
 
       setBookings(bookingsWithSlots)
+
+      // Sauvegarder en cache pour affichage instantané au prochain chargement
+      if (date && branchId) {
+        setCachedBookings(branchId, date, bookingsWithSlots)
+        setLastSyncTime(branchId)
+      }
     } catch (err) {
       console.error('Error fetching bookings:', err)
       setError('Erreur lors du chargement des réservations')

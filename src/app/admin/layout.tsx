@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { getClient } from '@/lib/supabase/client'
 import { Loader2 } from 'lucide-react'
 import { LanguageProvider, useTranslation } from '@/contexts/LanguageContext'
+import { useSessionPersistence } from '@/hooks/useSessionPersistence'
 
 function AdminLayoutContent({
   children,
@@ -18,6 +19,9 @@ function AdminLayoutContent({
   const [isChecking, setIsChecking] = useState(true)
   const hasCheckedRef = useRef(false)
   const isLoginPage = pathname === '/admin/login'
+
+  // Maintenir la session active en arrière-plan
+  useSessionPersistence()
 
   // Fonction de vérification stable
   const checkAuth = useCallback(async () => {
