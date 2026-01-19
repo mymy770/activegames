@@ -35,6 +35,7 @@ export interface BookingEmailVariables {
   logo_activegames_url: string
   logo_lasercity_url: string
   current_year: string
+  terms_conditions: string // HTML content of terms & conditions
 }
 
 // Configuration Resend
@@ -66,6 +67,47 @@ function generateBodyPreview(html: string): string {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   // Retourne les premiers 200 caractères
   return cleaned.substring(0, 200)
+}
+
+// Récupère les conditions générales depuis la base de données
+async function getTermsConditions(
+  bookingType: 'GAME' | 'EVENT',
+  locale: string
+): Promise<string> {
+  const supabase = getAdminSupabase()
+
+  // Déterminer le code du template (terms_game_xx ou terms_event_xx)
+  const templateType = bookingType === 'EVENT' ? 'event' : 'game'
+  const langCode = ['en', 'fr', 'he'].includes(locale) ? locale : 'en'
+  const templateCode = `terms_${templateType}_${langCode}`
+
+  // Récupérer le template des conditions
+  const { data: template } = await supabase
+    .from('email_templates')
+    .select('body_template')
+    .eq('code', templateCode)
+    .eq('is_active', true)
+    .single()
+
+  if (template?.body_template) {
+    return template.body_template
+  }
+
+  // Fallback vers anglais si pas trouvé
+  if (langCode !== 'en') {
+    const { data: fallbackTemplate } = await supabase
+      .from('email_templates')
+      .select('body_template')
+      .eq('code', `terms_${templateType}_en`)
+      .eq('is_active', true)
+      .single()
+
+    if (fallbackTemplate?.body_template) {
+      return fallbackTemplate.body_template
+    }
+  }
+
+  return '' // Retourne vide si aucun template trouvé
 }
 
 // Envoie un email et log le résultat
@@ -313,6 +355,12 @@ export async function sendBookingConfirmationEmail(params: {
     return ''
   }
 
+  // Récupérer les conditions générales
+  const termsConditions = await getTermsConditions(
+    booking.type as 'GAME' | 'EVENT',
+    locale
+  )
+
   // Préparer les variables
   const variables: BookingEmailVariables = {
     booking_reference: booking.reference_code,
@@ -332,6 +380,7 @@ export async function sendBookingConfirmationEmail(params: {
     logo_activegames_url: `${baseUrl}/images/logo-activegames.png`,
     logo_lasercity_url: `${baseUrl}/images/logo_laser_city.png`,
     current_year: new Date().getFullYear().toString(),
+    terms_conditions: termsConditions,
   }
 
   // Générer le sujet et le body

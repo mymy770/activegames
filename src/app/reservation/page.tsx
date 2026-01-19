@@ -60,6 +60,8 @@ export default function ReservationPage() {
   const [reservationNumber, setReservationNumber] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [validationErrors, setValidationErrors] = useState<{ phone?: string; email?: string }>({})
+  const [termsContent, setTermsContent] = useState<{ game: string | null; event: string | null }>({ game: null, event: null })
+  const [termsLoading, setTermsLoading] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -70,6 +72,32 @@ export default function ReservationPage() {
       }
     }
   }, [])
+
+  // Fetch terms and conditions from database
+  useEffect(() => {
+    const fetchTerms = async () => {
+      setTermsLoading(true)
+      try {
+        // Map locale to language code (fr not available on public site, fallback to en)
+        const langCode = locale === 'he' ? 'he' : 'en'
+
+        const response = await fetch(`/api/terms?lang=${langCode}`)
+        if (response.ok) {
+          const data = await response.json()
+          setTermsContent({
+            game: data.game || null,
+            event: data.event || null
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching terms:', error)
+      } finally {
+        setTermsLoading(false)
+      }
+    }
+
+    fetchTerms()
+  }, [locale])
 
   const isRTL = locale === 'he'
   const dir = getDirection(locale)
@@ -1617,108 +1645,74 @@ export default function ReservationPage() {
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6" style={{ fontFamily: 'Poppins, sans-serif' }}>
-              <div className="space-y-4 text-gray-300">
-                {/* Show different terms for Event vs Game */}
-                {bookingData.type === 'event' ? (
-                  /* Event Terms - Simplified to avoid errors */
-                  <div>
-                    <div>
-                      <h3 className="text-xl font-bold text-primary mb-2">Event Booking Information</h3>
-                      <ul className="list-disc list-inside space-y-2 ml-4">
-                        <li>Event reservations require a minimum of 15 participants</li>
-                        <li>Please arrive at least 15 minutes before your scheduled time for setup</li>
-                        <li>Reservations are confirmed upon payment</li>
-                        <li>Changes or cancellations must be made at least 48 hours in advance</li>
-                      </ul>
+              {termsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="terms-content-wrapper">
+                  {/* Display HTML content from database based on booking type */}
+                  {bookingData.type === 'event' && termsContent.event ? (
+                    <div
+                      className="terms-html-content"
+                      dangerouslySetInnerHTML={{ __html: termsContent.event }}
+                    />
+                  ) : termsContent.game ? (
+                    <div
+                      className="terms-html-content"
+                      dangerouslySetInnerHTML={{ __html: termsContent.game }}
+                    />
+                  ) : (
+                    /* Fallback if no content from database */
+                    <div className="text-gray-400 text-center py-8">
+                      {translations.booking?.contact?.terms?.loading_error || 'Terms and conditions are being loaded...'}
                     </div>
-                    <div className="mt-4">
-                      <h3 className="text-xl font-bold text-primary mb-2">Event Rules and Regulations</h3>
-                      <ul className="list-disc list-inside space-y-2 ml-4">
-                        <li>Follow all safety instructions provided by staff</li>
-                        <li>Respect other participants and maintain a friendly environment</li>
-                        <li>No food or drinks inside the game rooms without authorization</li>
-                        <li>Smoking is strictly prohibited</li>
-                        <li>Children under 12 must be accompanied by an adult</li>
-                        <li>Any damage to equipment will result in additional charges</li>
-                      </ul>
-                    </div>
-                    <div className="mt-4">
-                      <h3 className="text-xl font-bold text-primary mb-2">Event Payment Details</h3>
-                      <ul className="list-disc list-inside space-y-2 ml-4">
-                        <li>Payment is required at the time of booking</li>
-                        <li>Accepted payment methods: Cash, Credit Card, Bank Transfer</li>
-                        <li>Refunds are available only for cancellations made 48+ hours in advance</li>
-                        <li>Event packages include smart bracelet in the price</li>
-                      </ul>
-                    </div>
-                    <div className="pt-4 border-t border-primary/30 mt-4">
-                      <p className="text-sm text-gray-400">
-                        By checking the box, you acknowledge that you have read, understood, and agree to all event terms and conditions stated above.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  /* Game Terms - Original */
-                  <>
-                    {translations.booking?.contact?.terms?.booking_info && (
-                      <div>
-                        <h3 className="text-xl font-bold text-primary mb-2">
-                          {translations.booking.contact.terms.booking_info.title || 'Booking Information'}
-                        </h3>
-                        <ul className="list-disc list-inside space-y-2 ml-4">
-                          {(translations.booking.contact.terms.booking_info.items || []).map((item: string, index: number) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {translations.booking?.contact?.terms?.rules && (
-                      <div>
-                        <h3 className="text-xl font-bold text-primary mb-2">
-                          {translations.booking.contact.terms.rules.title || 'Rules and Regulations'}
-                        </h3>
-                        <ul className="list-disc list-inside space-y-2 ml-4">
-                          {(translations.booking.contact.terms.rules.items || []).map((item: string, index: number) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {translations.booking?.contact?.terms?.payment && (
-                      <div>
-                        <h3 className="text-xl font-bold text-primary mb-2">
-                          {translations.booking.contact.terms.payment.title || 'Payment Details'}
-                        </h3>
-                        <ul className="list-disc list-inside space-y-2 ml-4">
-                          {(translations.booking.contact.terms.payment.items || []).map((item: string, index: number) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {translations.booking?.contact?.terms?.contact && (
-                      <div>
-                        <h3 className="text-xl font-bold text-primary mb-2">
-                          {translations.booking.contact.terms.contact.title || 'Contact Information'}
-                        </h3>
-                        <p>{translations.booking.contact.terms.contact.description || 'For questions or special requests, please contact us:'}</p>
-                        <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
-                          {(translations.booking.contact.terms.contact.items || []).map((item: string, index: number) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {translations.booking?.contact?.terms?.acknowledgment && (
-                      <div className="pt-4 border-t border-primary/30">
-                        <p className="text-sm text-gray-400">
-                          {translations.booking.contact.terms.acknowledgment}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
+              <style jsx global>{`
+                .terms-html-content {
+                  color: #d1d5db;
+                  line-height: 1.7;
+                }
+                .terms-html-content h2 {
+                  color: #00f0ff;
+                  font-size: 1.5rem;
+                  font-weight: bold;
+                  margin-bottom: 1rem;
+                  margin-top: 1.5rem;
+                  font-family: 'Orbitron', sans-serif;
+                }
+                .terms-html-content h2:first-child {
+                  margin-top: 0;
+                }
+                .terms-html-content h3 {
+                  color: #00f0ff;
+                  font-size: 1.25rem;
+                  font-weight: 600;
+                  margin-bottom: 0.75rem;
+                  margin-top: 1.25rem;
+                }
+                .terms-html-content ul {
+                  list-style-type: disc;
+                  padding-left: 1.5rem;
+                  margin-bottom: 1rem;
+                }
+                .terms-html-content li {
+                  margin-bottom: 0.5rem;
+                }
+                .terms-html-content p {
+                  margin-bottom: 0.75rem;
+                }
+                .terms-html-content strong {
+                  color: #00f0ff;
+                  font-weight: 600;
+                }
+                .terms-html-content hr {
+                  border-color: rgba(0, 240, 255, 0.3);
+                  margin: 1.5rem 0;
+                }
+              `}</style>
             </div>
 
             {/* Modal Footer */}
