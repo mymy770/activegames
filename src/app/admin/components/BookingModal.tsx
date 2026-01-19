@@ -1163,15 +1163,18 @@ export function BookingModal({
       if (selectedContact) {
         // Contact déjà sélectionné, utiliser son ID
         contactIdToLink = selectedContact.id
-        
-        // Si les infos ont été modifiées, mettre à jour le contact
-        const hasChanges = 
-          selectedContact.first_name !== firstName.trim() ||
-          selectedContact.last_name !== lastName.trim() ||
-          selectedContact.phone !== phone.trim() ||
-          selectedContact.email !== email.trim() ||
-          selectedContact.notes_client !== notes.trim()
-        
+
+        // Normaliser les valeurs pour comparaison (null et "" sont équivalents)
+        const normalize = (val: string | null | undefined) => (val || '').trim()
+
+        // Si les infos ont été VRAIMENT modifiées, mettre à jour le contact
+        const hasChanges =
+          normalize(selectedContact.first_name) !== normalize(firstName) ||
+          normalize(selectedContact.last_name) !== normalize(lastName) ||
+          normalize(selectedContact.phone) !== normalize(phone) ||
+          normalize(selectedContact.email) !== normalize(email) ||
+          normalize(selectedContact.notes_client) !== normalize(notes)
+
         if (hasChanges) {
           const updated = await updateContact(selectedContact.id, {
             first_name: firstName.trim(),
@@ -1217,10 +1220,10 @@ export function BookingModal({
           }
         }
       } else {
-        // skipDuplicateCheck = true : créer directement sans vérifier (après confirmation doublon)
+        // skipDuplicateCheck = true : créer le contact malgré le doublon potentiel
         if (phone.trim()) {
           const newContact = await createContact({
-            branch_id_main: bookingBranchId, // Utiliser la branche de la réservation
+            branch_id_main: bookingBranchId,
             first_name: firstName.trim(),
             last_name: lastName.trim() || null,
             phone: phone.trim(),
@@ -1228,7 +1231,7 @@ export function BookingModal({
             notes_client: notes.trim() || null,
             source: 'admin_agenda',
           })
-          
+
           if (newContact) {
             contactIdToLink = newContact.id
             setSelectedContact(newContact)
@@ -3826,12 +3829,12 @@ export function BookingModal({
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 z-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setShowDuplicateWarning(false)}
           />
 
           {/* Modal */}
-          <div className={`relative w-full max-w-md mx-4 rounded-2xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`relative z-10 w-full max-w-md mx-4 rounded-2xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
             <div className="p-6">
               <div className="flex items-center gap-3 mb-4">
                 <AlertTriangle className={`w-6 h-6 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
@@ -3880,26 +3883,12 @@ export function BookingModal({
                   onClick={async () => {
                     if (!pendingContactData) return
 
-                    // Créer le contact malgré le doublon
-                    const newContact = await createContact({
-                      branch_id_main: bookingBranchId, // Utiliser la branche de la réservation
-                      first_name: firstName.trim(),
-                      last_name: lastName.trim() || null,
-                      phone: pendingContactData.phone,
-                      email: pendingContactData.email || null,
-                      notes_client: notes.trim() || null,
-                      source: 'admin_agenda',
-                    })
-
-                    if (newContact) {
-                      setSelectedContact(newContact)
-                      setShowDuplicateWarning(false)
-                      setPendingContactData(null)
-                      // Relancer la soumission avec skipDuplicateCheck = true
-                      const roomId = pendingEventRoomId
-                      setPendingEventRoomId(null)
-                      await submitWithRoom(roomId, true)
-                    }
+                    setShowDuplicateWarning(false)
+                    setPendingContactData(null)
+                    // Relancer la soumission avec skipDuplicateCheck = true (créer nouveau contact)
+                    const roomId = pendingEventRoomId
+                    setPendingEventRoomId(null)
+                    await submitWithRoom(roomId, true)
                   }}
                   disabled={loading}
                   className="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white flex items-center gap-2 disabled:opacity-50"
