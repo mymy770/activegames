@@ -7,6 +7,7 @@ import { ContactFieldAutocomplete } from './ContactFieldAutocomplete'
 import { useContacts } from '@/hooks/useContacts'
 import type { Contact, GameArea, LaserRoom } from '@/lib/supabase/types'
 import { useTranslation } from '@/contexts/LanguageContext'
+import { validateIsraeliPhone, VALIDATION_MESSAGES } from '@/lib/validation'
 
 interface OverbookingInfo {
   willCauseOverbooking: boolean
@@ -147,6 +148,7 @@ export function BookingModal({
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [notes, setNotes] = useState('')
   const [contactId, setContactId] = useState('') // ID unique du contact (auto-généré)
@@ -252,11 +254,19 @@ export function BookingModal({
     if (areFieldsFrozen) {
       return
     }
-    
+
     // Mettre à jour le champ
     if (field === 'firstName') setFirstName(value)
     else if (field === 'lastName') setLastName(value)
-    else if (field === 'phone') setPhone(value)
+    else if (field === 'phone') {
+      setPhone(value)
+      // Valider le format téléphone israélien
+      if (value.trim() && !validateIsraeliPhone(value)) {
+        setPhoneError(VALIDATION_MESSAGES.phone.israeliFormat)
+      } else {
+        setPhoneError(null)
+      }
+    }
     else if (field === 'email') setEmail(value)
   }
 
@@ -281,6 +291,7 @@ export function BookingModal({
     setFirstName('')
     setLastName('')
     setPhone('')
+    setPhoneError(null)
     setEmail('')
     setNotes('')
   }
@@ -827,12 +838,14 @@ export function BookingModal({
             setFirstName('')
             setLastName('')
             setPhone('')
+            setPhoneError(null)
             setEmail('')
           }
         } else {
           setFirstName('')
           setLastName('')
           setPhone('')
+          setPhoneError(null)
           setEmail('')
         }
       }
@@ -1630,6 +1643,7 @@ export function BookingModal({
           setFirstName('')
           setLastName('')
           setPhone('')
+          setPhoneError(null)
           setEmail('')
           setNotes('')
           setEventNotes('')
@@ -1674,6 +1688,11 @@ export function BookingModal({
     
     if (!phone.trim()) {
       setError(t('admin.booking_modal.validation.required_fields'))
+      return
+    }
+    if (!validateIsraeliPhone(phone)) {
+      setError(VALIDATION_MESSAGES.phone.israeliFormat)
+      setPhoneError(VALIDATION_MESSAGES.phone.israeliFormat)
       return
     }
     if (parsedParticipants < 1) {
@@ -3552,13 +3571,16 @@ export function BookingModal({
                   onChange={(value) => handleFieldChange('phone', value)}
                   onSelectContact={handleContactSelectedFromField}
                   fieldType="phone"
-                  placeholder={t('admin.booking_modal.contact.phone_placeholder')}
+                  placeholder="05XXXXXXXX"
                   required
                   isDark={isDark}
                   inputType="tel"
                   disabled={areFieldsFrozen}
                   onEnterKey={handleEnterKeyWrapper}
                 />
+                {phoneError && (
+                  <p className="mt-1 text-sm text-red-500">{phoneError}</p>
+                )}
               </div>
               <div>
                 <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
