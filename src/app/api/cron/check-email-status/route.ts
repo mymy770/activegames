@@ -110,9 +110,9 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        // Get events for this specific message
+        // Try to get events by email address (more reliable endpoint)
         const response = await fetch(
-          `${BREVO_API_URL}/smtp/statistics/events?messageId=${encodeURIComponent(brevoMessageId)}&limit=10`,
+          `${BREVO_API_URL}/smtp/statistics/events?email=${encodeURIComponent(email.recipient_email)}&limit=50&startDate=${encodeURIComponent(new Date(email.sent_at).toISOString().split('T')[0])}`,
           {
             headers: {
               'api-key': apiKey,
@@ -123,20 +123,103 @@ export async function GET(request: NextRequest) {
 
         if (!response.ok) {
           const errorText = await response.text()
-          console.error(`[CRON] Brevo API error for ${email.id}:`, errorText)
-          errors.push(`Email ${email.id}: Brevo API error`)
+          console.error(`[CRON] Brevo API error for ${email.id}:`, response.status, errorText)
+
+          // If statistics API doesn't work, try alternative: assume delivered after 5 minutes
+          const sentTime = new Date(email.sent_at).getTime()
+          const now = Date.now()
+          const fiveMinutes = 5 * 60 * 1000
+
+          if (now - sentTime > fiveMinutes) {
+            // Mark as delivered if sent more than 5 minutes ago (optimistic)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: updateError } = await (supabase as any)
+              .from('email_logs')
+              .update({
+                status: 'delivered',
+                metadata: {
+                  ...(email.metadata || {}),
+                  status_source: 'assumed_delivered',
+                  checked_at: new Date().toISOString(),
+                }
+              })
+              .eq('id', email.id)
+
+            if (!updateError) {
+              console.log(`[CRON] Assumed delivered for email ${email.id} (API unavailable)`)
+              updatedCount++
+            }
+          }
           continue
         }
 
         const data = await response.json() as BrevoEventResponse
 
         if (!data.events || data.events.length === 0) {
-          // No events yet, email is still in transit
+          // No events yet - if sent more than 5 minutes ago, assume delivered
+          const sentTime = new Date(email.sent_at).getTime()
+          const now = Date.now()
+          const fiveMinutes = 5 * 60 * 1000
+
+          if (now - sentTime > fiveMinutes) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: updateError } = await (supabase as any)
+              .from('email_logs')
+              .update({
+                status: 'delivered',
+                metadata: {
+                  ...(email.metadata || {}),
+                  status_source: 'assumed_delivered_no_events',
+                  checked_at: new Date().toISOString(),
+                }
+              })
+              .eq('id', email.id)
+
+            if (!updateError) {
+              console.log(`[CRON] Assumed delivered for email ${email.id} (no events after 5min)`)
+              updatedCount++
+            }
+          }
           continue
         }
 
-        // Get the most recent event
-        const latestEvent = data.events[0]
+        // Find events matching this specific message (by messageId or by timing)
+        const matchingEvents = data.events.filter(evt =>
+          evt.messageId === brevoMessageId ||
+          // Fallback: match by timing (within 1 minute of send time)
+          Math.abs(new Date(evt.date).getTime() - new Date(email.sent_at).getTime()) < 60000
+        )
+
+        if (matchingEvents.length === 0) {
+          // No matching events, assume delivered if old enough
+          const sentTime = new Date(email.sent_at).getTime()
+          const now = Date.now()
+          const fiveMinutes = 5 * 60 * 1000
+
+          if (now - sentTime > fiveMinutes) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: updateError } = await (supabase as any)
+              .from('email_logs')
+              .update({
+                status: 'delivered',
+                metadata: {
+                  ...(email.metadata || {}),
+                  status_source: 'assumed_delivered_no_match',
+                  checked_at: new Date().toISOString(),
+                }
+              })
+              .eq('id', email.id)
+
+            if (!updateError) {
+              console.log(`[CRON] Assumed delivered for email ${email.id} (no matching events)`)
+              updatedCount++
+            }
+          }
+          continue
+        }
+
+        // Get the most recent matching event
+        const latestEvent = matchingEvents[0]
         const newStatus = mapBrevoEventToStatus(latestEvent.event)
 
         if (newStatus) {
