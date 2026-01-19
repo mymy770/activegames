@@ -1237,12 +1237,14 @@
         "user_logout": "התנתקות",
         "permission_changed": "הרשאה שונתה",
         "settings_updated": "הגדרות עודכנו",
-        "log_deleted": "רשומה נמחקה"
+        "log_deleted": "רשומה נמחקה",
+        "email_sent": "אימייל נשלח"
       },
       "targets": {
         "booking": "הזמנה",
         "order": "הזמנה",
         "contact": "איש קשר",
+        "email": "אימייל",
         "user": "משתמש",
         "branch": "סניף",
         "settings": "הגדרות",

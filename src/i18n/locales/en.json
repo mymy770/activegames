@@ -1116,12 +1116,14 @@
         "user_logout": "User logout",
         "permission_changed": "Permission changed",
         "settings_updated": "Settings updated",
-        "log_deleted": "Log deleted"
+        "log_deleted": "Log deleted",
+        "email_sent": "Email sent"
       },
       "targets": {
         "booking": "Booking",
         "order": "Order",
         "contact": "Contact",
+        "email": "Email",
         "user": "User",
         "branch": "Branch",
         "settings": "Settings",

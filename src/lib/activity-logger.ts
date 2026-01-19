@@ -307,3 +307,35 @@ export async function logLogDeletion(params: {
     ipAddress: params.ipAddress,
   })
 }
+
+/**
+ * Convenience function to log email sent actions
+ */
+export async function logEmailSent(params: {
+  recipientEmail: string
+  recipientName?: string
+  subject: string
+  templateCode?: string
+  entityType?: 'booking' | 'order' | 'contact'
+  entityId?: string
+  branchId?: string | null
+}): Promise<void> {
+  await logActivity({
+    userId: null,
+    userRole: 'system',
+    userName: 'System',
+    actionType: 'email_sent',
+    targetType: 'email',
+    targetId: params.entityId,
+    targetName: params.recipientEmail,
+    branchId: params.branchId,
+    details: {
+      recipient_email: params.recipientEmail,
+      recipient_name: params.recipientName,
+      subject: params.subject,
+      template_code: params.templateCode,
+      entity_type: params.entityType,
+      entity_id: params.entityId,
+    },
+  })
+}

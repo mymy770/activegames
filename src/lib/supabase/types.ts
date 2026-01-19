@@ -48,8 +48,9 @@ export type ActionType =
   | 'permission_changed'
   | 'settings_updated'
   | 'log_deleted'
+  | 'email_sent'
 
-export type TargetType = 'booking' | 'order' | 'contact' | 'user' | 'branch' | 'settings' | 'log'
+export type TargetType = 'booking' | 'order' | 'contact' | 'user' | 'branch' | 'settings' | 'log' | 'email'
 
 // Types pour Permissions
 export type ResourceType = 'agenda' | 'orders' | 'clients' | 'users' | 'logs' | 'settings' | 'permissions'

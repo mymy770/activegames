@@ -1173,12 +1173,14 @@
         "user_logout": "Deconnexion",
         "permission_changed": "Permission modifiee",
         "settings_updated": "Parametres modifies",
-        "log_deleted": "Log supprime"
+        "log_deleted": "Log supprime",
+        "email_sent": "Email envoye"
       },
       "targets": {
         "booking": "Reservation",
         "order": "Commande",
         "contact": "Contact",
+        "email": "Email",
         "user": "Utilisateur",
         "branch": "Branche",
         "settings": "Parametres",

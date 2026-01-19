@@ -6,6 +6,7 @@
 import { Resend } from 'resend'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { EmailLog, EmailTemplate, Booking, Branch, EmailLogInsert } from '@/lib/supabase/types'
+import { logEmailSent } from '@/lib/activity-logger'
 
 // Client Supabase admin pour les opérations d'email (pas besoin d'auth utilisateur)
 const getAdminSupabase = () => {
@@ -162,6 +163,17 @@ export async function sendEmail(params: {
     } else {
       console.log('[EMAIL sendEmail] Email log updated to sent successfully')
     }
+
+    // Log l'envoi d'email dans les activity logs
+    await logEmailSent({
+      recipientEmail: params.to,
+      recipientName: params.toName,
+      subject: params.subject,
+      templateCode: params.templateCode,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      branchId: params.branchId,
+    })
 
     console.log('[EMAIL sendEmail] === SUCCESS ===')
     return { success: true, emailLogId: emailLog.id }
