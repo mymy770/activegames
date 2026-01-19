@@ -1,5 +1,7 @@
 -- Ajouter les templates de Conditions Générales pour les commandes en ligne
 -- Ces templates seront affichés quand le client coche la case CGV et inclus dans l'email de confirmation
+-- ATTENTION: Si les templates existent déjà, supprimer d'abord avec:
+-- DELETE FROM email_templates WHERE code LIKE 'terms_%';
 
 -- Template CGV pour les réservations de jeux (GAME) - Hébreu
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -12,13 +14,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">תנאים כלליים</h3>
 
-  <p><strong>כללי השתתפות:</strong></p>
+  <p><strong>כללי השתתפות (כל הפעילויות):</strong></p>
   <ul style="margin: 10px 0; padding-right: 20px;">
     <li>ההשתתפות בנעליים סגורות ושטוחות בלבד</li>
     <li>אסורה ההשתתפות לנשים בהריון, חולי אפילפסיה ובעלי קוצבי לב</li>
-    <li>זמן משחק: 20 דקות נטו + 10-15 דקות של הדרכה והלבשה</li>
-    <li>החברה שומרת לעצמה את הזכות לבצע משחקים עם פחות מ-30 משתתפים במקרה של תקלות טכניות</li>
+    <li>החברה שומרת לעצמה את הזכות לבצע משחקים עם פחות משתתפים במקרה של תקלות טכניות</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City - לייזר סיטי</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משך משחק לייזר: 20 דקות נטו + 10-15 דקות של הדרכה והלבשה</li>
+    <li>החברה שומרת לעצמה את הזכות להחליט על כמות המשתתפים שנכנסים בו זמנית למשחק</li>
+    <li>במידה ומספר המשתתפים בקבוצה גדול מכמות האפודים תבוצע חלוקה לסבבים</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games - אקטיב גיימס</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משך פעילות Active Games: 60 דקות של משחק רציף</li>
+    <li>עד 6 שחקנים בו זמנית בכל חדר</li>
+    <li>המתחם כולל 8 חדרים אינטראקטיביים שונים</li>
+    <li>כל משתתף מקבל צמיד חכם לרישום התוצאות</li>
+    <li>ניתן לשחק במצב תחרותי או שיתופי</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 חבילת Mix - לייזר + Active Games</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משחק לייזר אחד (20 דקות) + 30 דקות Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>מידע חשוב:</strong></p>
   <ul style="margin: 10px 0; padding-right: 20px;">
@@ -41,7 +67,10 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
 
 -- Template CGV pour les réservations de jeux (GAME) - Anglais
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -54,13 +83,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">General Terms & Conditions</h3>
 
-  <p><strong>Participation Rules:</strong></p>
+  <p><strong>Participation Rules (All Activities):</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
     <li>Closed and flat shoes are mandatory</li>
     <li>Participation is prohibited for pregnant women, epilepsy patients, and pacemaker users</li>
-    <li>Game duration: 20 minutes net + 10-15 minutes for briefing and equipment</li>
-    <li>The company reserves the right to run games with fewer than 30 participants in case of technical issues</li>
+    <li>The company reserves the right to run games with fewer participants in case of technical issues</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Laser game duration: 20 minutes net + 10-15 minutes for briefing and equipment</li>
+    <li>The company reserves the right to decide on the number of participants entering simultaneously</li>
+    <li>If the group size exceeds the number of vests, participants will be divided into rounds</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Active Games session duration: 60 minutes of continuous play</li>
+    <li>Up to 6 players simultaneously in each room</li>
+    <li>The complex includes 8 different interactive rooms</li>
+    <li>Each participant receives a smart wristband for score tracking</li>
+    <li>Play in competitive or cooperative mode</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 Mix Package - Laser + Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>One laser game (20 minutes) + 30 minutes of Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>Important Information:</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -83,7 +136,10 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
 
 -- Template CGV pour les réservations de jeux (GAME) - Français
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -96,13 +152,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">Conditions Générales</h3>
 
-  <p><strong>Règles de participation :</strong></p>
+  <p><strong>Règles de participation (Toutes activités) :</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
     <li>Chaussures fermées et plates obligatoires</li>
     <li>Participation interdite aux femmes enceintes, épileptiques et porteurs de pacemaker</li>
-    <li>Durée du jeu : 20 minutes nettes + 10-15 minutes de briefing et équipement</li>
-    <li>La société se réserve le droit d''organiser des parties avec moins de 30 participants en cas de problèmes techniques</li>
+    <li>La société se réserve le droit d''organiser des parties avec moins de participants en cas de problèmes techniques</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Durée du jeu laser : 20 minutes nettes + 10-15 minutes de briefing et équipement</li>
+    <li>La société se réserve le droit de décider du nombre de participants entrant simultanément</li>
+    <li>Si le groupe dépasse le nombre de gilets, les participants seront répartis en tours</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Durée de la session Active Games : 60 minutes de jeu continu</li>
+    <li>Jusqu''à 6 joueurs simultanément dans chaque salle</li>
+    <li>Le complexe comprend 8 salles interactives différentes</li>
+    <li>Chaque participant reçoit un bracelet connecté pour le suivi des scores</li>
+    <li>Mode compétitif ou coopératif au choix</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 Forfait Mix - Laser + Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Une partie de laser (20 minutes) + 30 minutes d''Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>Informations importantes :</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -125,7 +205,10 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
 
 -- Template CGV pour les événements (EVENT) - Hébreu
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -138,13 +221,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">תנאים כלליים לאירועים</h3>
 
-  <p><strong>כללי השתתפות:</strong></p>
+  <p><strong>כללי השתתפות (כל הפעילויות):</strong></p>
   <ul style="margin: 10px 0; padding-right: 20px;">
     <li>ההשתתפות בנעליים סגורות ושטוחות בלבד</li>
     <li>אסורה ההשתתפות לנשים בהריון, חולי אפילפסיה ובעלי קוצבי לב</li>
-    <li>זמן משחק: 20 דקות נטו + 10-15 דקות של הדרכה והלבשה</li>
-    <li>החברה שומרת לעצמה את הזכות לבצע משחקים עם פחות מ-30 משתתפים במקרה של תקלות טכניות</li>
+    <li>החברה שומרת לעצמה את הזכות לבצע משחקים עם פחות משתתפים במקרה של תקלות טכניות</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City - לייזר סיטי</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משך משחק לייזר: 20 דקות נטו + 10-15 דקות של הדרכה והלבשה</li>
+    <li>החברה שומרת לעצמה את הזכות להחליט על כמות המשתתפים שנכנסים בו זמנית למשחק</li>
+    <li>במידה ומספר המשתתפים בקבוצה גדול מכמות האפודים תבוצע חלוקה לסבבים</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games - אקטיב גיימס</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משך פעילות Active Games: 60 דקות של משחק רציף</li>
+    <li>עד 6 שחקנים בו זמנית בכל חדר</li>
+    <li>המתחם כולל 8 חדרים אינטראקטיביים שונים</li>
+    <li>כל משתתף מקבל צמיד חכם לרישום התוצאות</li>
+    <li>ניתן לשחק במצב תחרותי או שיתופי</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 חבילת Mix - לייזר + Active Games</h4>
+  <ul style="margin: 10px 0; padding-right: 20px;">
+    <li>משחק לייזר אחד (20 דקות) + 30 דקות Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>תנאי חדר האירוח:</strong></p>
   <ul style="margin: 10px 0; padding-right: 20px;">
@@ -167,11 +274,8 @@ VALUES (
     <li>הפעילות נתחיל 15 דקות לאחר השעה שנקבעה</li>
     <li>במידה והלקוח יסרב להתחיל את הפעילות, החברה לא מתחייבת לשעה ולכניסה למשחק</li>
     <li>מספר משתתפים באירוע: מינימום 15 משתתפים</li>
-    <li>משך האירוע - שעה וחצי/שעתיים - תלוי בכמות המשחקים</li>
+    <li>משך האירוע - שעה וחצי/שעתיים - תלוי בסוג הפעילות וכמות המשחקים</li>
   </ul>
-
-  <p><strong>מספר משתתפים במשחק:</strong></p>
-  <p>החברה שומרת לעצמה את הזכות להחליט על כמות המשתתפים שנכנסים בו זמנית למשחק. במידה ומספר המשתתפים בקבוצה גדול מכמות האפודים תבוצע חלוקה לסבבים.</p>
 
   <p><strong>מידע חשוב:</strong></p>
   <ul style="margin: 10px 0; padding-right: 20px;">
@@ -196,7 +300,10 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
 
 -- Template CGV pour les événements (EVENT) - Anglais
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -209,13 +316,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">General Terms & Conditions for Events</h3>
 
-  <p><strong>Participation Rules:</strong></p>
+  <p><strong>Participation Rules (All Activities):</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
     <li>Closed and flat shoes are mandatory</li>
     <li>Participation is prohibited for pregnant women, epilepsy patients, and pacemaker users</li>
-    <li>Game duration: 20 minutes net + 10-15 minutes for briefing and equipment</li>
-    <li>The company reserves the right to run games with fewer than 30 participants in case of technical issues</li>
+    <li>The company reserves the right to run games with fewer participants in case of technical issues</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Laser game duration: 20 minutes net + 10-15 minutes for briefing and equipment</li>
+    <li>The company reserves the right to decide on the number of participants entering simultaneously</li>
+    <li>If the group size exceeds the number of vests, participants will be divided into rounds</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Active Games session duration: 60 minutes of continuous play</li>
+    <li>Up to 6 players simultaneously in each room</li>
+    <li>The complex includes 8 different interactive rooms</li>
+    <li>Each participant receives a smart wristband for score tracking</li>
+    <li>Play in competitive or cooperative mode</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 Mix Package - Laser + Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>One laser game (20 minutes) + 30 minutes of Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>Event Room Conditions:</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -238,11 +369,8 @@ VALUES (
     <li>Activities will start 15 minutes after the scheduled time</li>
     <li>If the customer refuses to start the activity, the company is not committed to the time and game entry</li>
     <li>Minimum participants for an event: 15 participants</li>
-    <li>Event duration - 1.5/2 hours - depends on number of games</li>
+    <li>Event duration - 1.5/2 hours - depends on activity type and number of games</li>
   </ul>
-
-  <p><strong>Number of Players per Game:</strong></p>
-  <p>The company reserves the right to decide on the number of participants entering the game simultaneously. If the group size exceeds the number of vests, participants will be divided into rounds.</p>
 
   <p><strong>Important Information:</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -267,7 +395,10 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
 
 -- Template CGV pour les événements (EVENT) - Français
 INSERT INTO email_templates (code, name, description, subject_template, body_template, is_active, is_system, available_variables)
@@ -280,13 +411,37 @@ VALUES (
 <div style="font-family: Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.6;">
   <h3 style="color: #E65100; margin-bottom: 15px;">Conditions Générales pour les Événements</h3>
 
-  <p><strong>Règles de participation :</strong></p>
+  <p><strong>Règles de participation (Toutes activités) :</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
     <li>Chaussures fermées et plates obligatoires</li>
     <li>Participation interdite aux femmes enceintes, épileptiques et porteurs de pacemaker</li>
-    <li>Durée du jeu : 20 minutes nettes + 10-15 minutes de briefing et équipement</li>
-    <li>La société se réserve le droit d''organiser des parties avec moins de 30 participants en cas de problèmes techniques</li>
+    <li>La société se réserve le droit d''organiser des parties avec moins de participants en cas de problèmes techniques</li>
   </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+  <h4 style="color: #7B1FA2; margin-bottom: 10px;">🎯 Laser City</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Durée du jeu laser : 20 minutes nettes + 10-15 minutes de briefing et équipement</li>
+    <li>La société se réserve le droit de décider du nombre de participants entrant simultanément</li>
+    <li>Si le groupe dépasse le nombre de gilets, les participants seront répartis en tours</li>
+  </ul>
+
+  <h4 style="color: #E65100; margin-bottom: 10px;">🎮 Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Durée de la session Active Games : 60 minutes de jeu continu</li>
+    <li>Jusqu''à 6 joueurs simultanément dans chaque salle</li>
+    <li>Le complexe comprend 8 salles interactives différentes</li>
+    <li>Chaque participant reçoit un bracelet connecté pour le suivi des scores</li>
+    <li>Mode compétitif ou coopératif au choix</li>
+  </ul>
+
+  <h4 style="color: #00897B; margin-bottom: 10px;">🔄 Forfait Mix - Laser + Active Games</h4>
+  <ul style="margin: 10px 0; padding-left: 20px;">
+    <li>Une partie de laser (20 minutes) + 30 minutes d''Active Games</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
 
   <p><strong>Conditions de la salle d''événement :</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -309,11 +464,8 @@ VALUES (
     <li>Les activités commenceront 15 minutes après l''heure prévue</li>
     <li>Si le client refuse de commencer l''activité, la société n''est pas engagée sur l''horaire et l''entrée en jeu</li>
     <li>Nombre minimum de participants : 15 personnes</li>
-    <li>Durée de l''événement - 1h30/2h - selon le nombre de parties</li>
+    <li>Durée de l''événement - 1h30/2h - selon le type d''activité et le nombre de parties</li>
   </ul>
-
-  <p><strong>Nombre de joueurs par partie :</strong></p>
-  <p>La société se réserve le droit de décider du nombre de participants entrant simultanément dans le jeu. Si le groupe dépasse le nombre de gilets, les participants seront répartis en tours.</p>
 
   <p><strong>Informations importantes :</strong></p>
   <ul style="margin: 10px 0; padding-left: 20px;">
@@ -338,4 +490,7 @@ VALUES (
   true,
   true,
   '[]'
-);
+)
+ON CONFLICT (code) DO UPDATE SET
+  body_template = EXCLUDED.body_template,
+  updated_at = NOW();
