@@ -452,6 +452,7 @@
       "logs": "יומן פעילות",
       "permissions": "הרשאות",
       "roles": "ניהול תפקידים",
+      "settings": "הגדרות",
       "switch_branch": "החלף סניף",
       "all_branches": "כל הסניפים",
       "pending_orders": "הזמנות ממתינות",
@@ -605,6 +606,7 @@
     },
     "orders": {
       "title": "הזמנות",
+      "emails_button": "אימיילים",
       "subtitle": "ניהול הזמנות",
       "search_placeholder": "חיפוש הזמנה (שם, טלפון, אימייל, מספר הפניה)...",
       "no_orders": "לא נמצאו הזמנות",
@@ -646,7 +648,9 @@
         "actions": "פעולות",
         "branch": "סניף",
         "created": "נוצר",
-        "notes": "הערות"
+        "notes": "הערות",
+        "zone": "אזור",
+        "source": "מקור"
       },
       "actions": {
         "view": "צפה",
@@ -675,16 +679,18 @@
       "open_booking": "פתח הזמנה",
       "client_card": "כרטיס לקוח",
       "view_in_crm": "צפה ב-CRM",
+      "resend_email": "שלח שוב אימייל אישור",
+      "resend_email_desc": "שלח את האימייל מחדש",
+      "resend_email_success": "האימייל נשלח בהצלחה",
+      "resend_email_error": "שגיאה בשליחת האימייל",
+      "no_email_address": "אין כתובת אימייל",
       "informations": "מידע",
       "created_on": "נוצר בתאריך",
       "source_website": "אתר אינטרנט",
       "branch": "סניף",
       "results": "תוצאות",
       "orders_count": "הזמנות",
-      "no_matching_orders": "אין הזמנות התואמות את הסינון",
-      "table": {
-        "source": "מקור"
-      }
+      "no_matching_orders": "אין הזמנות התואמות את הסינון"
     },
     "users": {
       "title": "ניהול משתמשים",
@@ -1240,6 +1246,101 @@
         "branch": "סניף",
         "settings": "הגדרות",
         "log": "רשומה"
+      }
+    },
+    "emails": {
+      "title": "היסטוריית אימיילים",
+      "subtitle": "צפו ונהלו אימיילים שנשלחו",
+      "access_denied": "גישה נדחתה",
+      "access_denied_message": "רק מנהלי-על יכולים לגשת לדף זה.",
+      "no_emails": "לא נשלחו אימיילים",
+      "search_placeholder": "חיפוש לפי אימייל, נושא...",
+      "resend": "שלח מחדש",
+      "delete": "מחק",
+      "delete_confirm": "האם אתה בטוח שברצונך למחוק את האימייל הזה?",
+      "view_details": "צפה בפרטים",
+      "details_title": "פרטי האימייל",
+      "preview": "תצוגה מקדימה",
+      "error": "שגיאה",
+      "created_at": "נוצר בתאריך",
+      "sent_at": "נשלח בתאריך",
+      "resend_success": "האימייל נשלח מחדש בהצלחה",
+      "resend_error": "שגיאה בשליחה מחדש של האימייל",
+      "delete_success": "האימייל נמחק בהצלחה",
+      "delete_error": "שגיאה במחיקת האימייל",
+      "filter": {
+        "all_status": "כל הסטטוסים",
+        "more": "עוד מסננים"
+      },
+      "stats": {
+        "total": "סה״כ",
+        "sent": "נשלחו",
+        "failed": "נכשלו",
+        "pending": "ממתינים"
+      },
+      "status": {
+        "sent": "נשלח",
+        "delivered": "נמסר",
+        "failed": "נכשל",
+        "bounced": "חזר",
+        "pending": "ממתין"
+      },
+      "table": {
+        "status": "סטטוס",
+        "recipient": "נמען",
+        "subject": "נושא",
+        "date": "תאריך",
+        "actions": "פעולות",
+        "sent_at": "נשלח בתאריך"
+      },
+      "pagination": {
+        "showing": "מציג {{from}} עד {{to}} מתוך {{total}}"
+      }
+    },
+    "settings": {
+      "title": "הגדרות",
+      "subtitle": "הגדרת פרמטרים של המערכת",
+      "access_denied": "גישה נדחתה",
+      "access_denied_message": "רק מנהלי-על יכולים לגשת להגדרות.",
+      "sections": {
+        "templates": "תבניות אימייל",
+        "templates_desc": "נהלו תבניות התראות"
+      },
+      "email_templates": {
+        "title": "תבניות אימייל",
+        "subtitle": "נהלו תבניות אימייל להתראות אוטומטיות",
+        "no_templates": "אין תבניות",
+        "create": "צור תבנית",
+        "create_title": "תבנית חדשה",
+        "edit": "ערוך",
+        "edit_title": "ערוך תבנית",
+        "delete": "מחק",
+        "delete_confirm": "האם אתה בטוח שברצונך למחוק את התבנית \"{{name}}\"?",
+        "system": "מערכת",
+        "system_template": "תבנית מערכת",
+        "system_template_info": "תבנית זו משמשת את המערכת ולא ניתן למחוק אותה",
+        "cannot_delete_system": "לא ניתן למחוק תבניות מערכת",
+        "active": "פעיל",
+        "inactive": "לא פעיל",
+        "activate": "הפעל",
+        "deactivate": "השבת",
+        "preview": "תצוגה מקדימה",
+        "toggle_error": "שגיאה בשינוי סטטוס",
+        "save_success": "התבנית נשמרה בהצלחה",
+        "save_error": "שגיאה בשמירת התבנית",
+        "delete_success": "התבנית נמחקה בהצלחה",
+        "delete_error": "שגיאה במחיקת התבנית",
+        "form": {
+          "name": "שם התבנית",
+          "code": "קוד (מזהה ייחודי)",
+          "code_help": "מזהה ייחודי לתבנית (אותיות קטנות, מספרים וקווים תחתיים)",
+          "description": "תיאור",
+          "subject": "נושא האימייל",
+          "body": "תוכן HTML",
+          "active": "תבנית פעילה",
+          "is_active": "תבנית פעילה",
+          "variables_help": "משתנים זמינים: {{booking_reference}}, {{booking_date}}, {{booking_time}}, {{participants}}, {{branch_name}}, {{branch_address}}, {{branch_phone}}, {{client_name}}, {{client_email}}"
+        }
       }
     },
     "permissions": {

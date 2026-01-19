@@ -48,8 +48,8 @@ export default function LoginPage() {
       }
 
       // Connexion réussie - redirection vers admin
+      // Note: ne pas setLoading(false) ici car on redirige
       router.push('/admin')
-      router.refresh()
     } catch (err) {
       console.error('Login error:', err)
       setError(t('admin.login.error_generic'))

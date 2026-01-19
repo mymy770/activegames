@@ -294,7 +294,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
       <div className={`grid grid-cols-12 gap-2 px-4 py-3 border-b ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
         <div className="col-span-1">
           <FilterDropdown
-            label="Type"
+            label={t('admin.orders.table.type')}
             options={typeOptions}
             value={typeFilter}
             onChange={setTypeFilter}
@@ -303,7 +303,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
         </div>
         <div className="col-span-1">
           <FilterDropdown
-            label="Statut"
+            label={t('admin.orders.table.status')}
             options={statusOptions}
             value={statusFilter}
             onChange={setStatusFilter}
@@ -353,7 +353,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
         <div className="col-span-1">
           {typeFilter === 'GAME' ? (
             <FilterDropdown
-              label="Zone"
+              label={t('admin.orders.table.zone')}
               options={gameAreaOptions}
               value={gameAreaFilter}
               onChange={setGameAreaFilter}
@@ -361,13 +361,13 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
             />
           ) : (
             <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Zone
+              {t('admin.orders.table.zone')}
             </span>
           )}
         </div>
         <div className="col-span-1">
           <FilterDropdown
-            label="Source"
+            label={t('admin.orders.table.source')}
             options={sourceOptions}
             value={sourceFilter}
             onChange={setSourceFilter}

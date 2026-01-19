@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { verifyApiPermission } from '@/lib/permissions'
 import { logOrderAction, logBookingAction, getClientIpFromHeaders } from '@/lib/activity-logger'
-import type { UserRole } from '@/lib/supabase/types'
+import { sendBookingConfirmationEmail } from '@/lib/email-sender'
+import type { UserRole, Booking, Branch } from '@/lib/supabase/types'
 
 /**
  * GET /api/orders/[id]
@@ -280,6 +281,33 @@ export async function PATCH(
             ipAddress
           })
 
+          // Envoyer l'email de confirmation si le client a un email
+          if (order.customer_email) {
+            // Récupérer le booking complet
+            const { data: bookingData } = await supabase
+              .from('bookings')
+              .select('*')
+              .eq('id', order.booking_id)
+              .single()
+
+            // Récupérer la branche
+            const { data: branchData } = await supabase
+              .from('branches')
+              .select('*')
+              .eq('id', order.branch_id)
+              .single()
+
+            if (bookingData && branchData) {
+              sendBookingConfirmationEmail({
+                booking: bookingData as Booking,
+                branch: branchData as Branch,
+                triggeredBy: user.id
+              }).catch(err => {
+                console.error('Failed to send confirmation email on reactivation:', err)
+              })
+            }
+          }
+
           return NextResponse.json({
             success: true,
             message: 'Order reactivated successfully',
@@ -443,6 +471,33 @@ export async function PATCH(
         details: { fromReactivatedOrder: id, orderType: order.order_type },
         ipAddress
       })
+
+      // Envoyer l'email de confirmation si le client a un email
+      if (order.customer_email) {
+        // Récupérer le booking complet qu'on vient de créer
+        const { data: bookingData } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('id', booking.id)
+          .single()
+
+        // Récupérer la branche
+        const { data: branchData } = await supabase
+          .from('branches')
+          .select('*')
+          .eq('id', order.branch_id)
+          .single()
+
+        if (bookingData && branchData) {
+          sendBookingConfirmationEmail({
+            booking: bookingData as Booking,
+            branch: branchData as Branch,
+            triggeredBy: user.id
+          }).catch(err => {
+            console.error('Failed to send confirmation email on reactivation (new booking):', err)
+          })
+        }
+      }
 
       return NextResponse.json({
         success: true,

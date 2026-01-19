@@ -227,27 +227,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceRoleClient()
     const ipAddress = getClientIpFromHeaders(request.headers)
 
-    // Vérifier les doublons
-    const { data: existingContact } = await supabase
-      .from('contacts')
-      .select('id, first_name, last_name')
-      .eq('branch_id_main', branch_id_main)
-      .eq('phone', formattedPhone)
-      .single<{ id: string; first_name: string; last_name: string | null }>()
-
-    if (existingContact) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `A contact with this phone already exists: ${existingContact.first_name} ${existingContact.last_name || ''}`.trim(),
-          messageKey: 'errors.duplicatePhone',
-          existingContact
-        },
-        { status: 409 }
-      )
-    }
-
-    // Créer le contact
+    // Créer le contact (pas de vérification de doublon - plusieurs contacts peuvent avoir le même tel/email)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: contact, error } = await (supabase as any)
       .from('contacts')

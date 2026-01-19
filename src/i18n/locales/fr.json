@@ -449,7 +449,9 @@
     },
     "layout": {
       "loading": "Chargement...",
-      "redirecting": "Redirection vers la connexion..."
+      "redirecting": "Redirection vers la connexion...",
+      "logout": "Deconnexion",
+      "language": "Langue"
     },
     "login": {
       "title": "Connectez-vous pour acceder au tableau de bord",
@@ -599,6 +601,7 @@
     },
     "orders": {
       "title": "Commandes",
+      "emails_button": "Emails",
       "search_placeholder": "Rechercher une commande (nom, telephone, email, reference)...",
       "stats": {
         "total": "Total",
@@ -637,7 +640,9 @@
         "actions": "Actions",
         "branch": "Agence",
         "created": "Cree le",
-        "notes": "Notes"
+        "notes": "Notes",
+        "zone": "Zone",
+        "source": "Source"
       },
       "actions": {
         "view": "Voir",
@@ -668,6 +673,11 @@
       "open_booking": "Ouvrir la reservation",
       "client_card": "Fiche client",
       "view_in_crm": "Voir dans le CRM",
+      "resend_email": "Renvoyer email de confirmation",
+      "resend_email_desc": "Envoyer a nouveau l'email",
+      "resend_email_success": "Email envoye avec succes",
+      "resend_email_error": "Erreur lors de l'envoi de l'email",
+      "no_email_address": "Pas d'adresse email",
       "informations": "Informations",
       "created_on": "Cree le",
       "source_website": "Site internet",
@@ -1172,6 +1182,101 @@
         "branch": "Branche",
         "settings": "Parametres",
         "log": "Log"
+      }
+    },
+    "emails": {
+      "title": "Historique des emails",
+      "subtitle": "Consultez et gerez les emails envoyes",
+      "access_denied": "Acces refuse",
+      "access_denied_message": "Seuls les super administrateurs peuvent acceder a cette page.",
+      "no_emails": "Aucun email envoye",
+      "search_placeholder": "Rechercher par email, sujet...",
+      "resend": "Renvoyer",
+      "delete": "Supprimer",
+      "delete_confirm": "Etes-vous sur de vouloir supprimer cet email ?",
+      "view_details": "Voir les details",
+      "details_title": "Details de l'email",
+      "preview": "Apercu",
+      "error": "Erreur",
+      "created_at": "Cree le",
+      "sent_at": "Envoye le",
+      "resend_success": "Email renvoye avec succes",
+      "resend_error": "Erreur lors du renvoi de l'email",
+      "delete_success": "Email supprime avec succes",
+      "delete_error": "Erreur lors de la suppression",
+      "filter": {
+        "all_status": "Tous les statuts",
+        "more": "Plus de filtres"
+      },
+      "stats": {
+        "total": "Total",
+        "sent": "Envoyes",
+        "failed": "Echoues",
+        "pending": "En attente"
+      },
+      "status": {
+        "sent": "Envoye",
+        "delivered": "Delivre",
+        "failed": "Echoue",
+        "bounced": "Rebondi",
+        "pending": "En attente"
+      },
+      "table": {
+        "status": "Statut",
+        "recipient": "Destinataire",
+        "subject": "Sujet",
+        "date": "Date",
+        "actions": "Actions",
+        "sent_at": "Envoye le"
+      },
+      "pagination": {
+        "showing": "Affichage de {{from}} a {{to}} sur {{total}}"
+      }
+    },
+    "settings": {
+      "title": "Parametres",
+      "subtitle": "Configurez les parametres du systeme",
+      "access_denied": "Acces refuse",
+      "access_denied_message": "Seuls les super administrateurs peuvent acceder aux parametres.",
+      "sections": {
+        "templates": "Templates d'emails",
+        "templates_desc": "Gerez les templates de notifications"
+      },
+      "email_templates": {
+        "title": "Templates d'emails",
+        "subtitle": "Gerez les templates d'emails pour les notifications automatiques",
+        "no_templates": "Aucun template",
+        "create": "Creer un template",
+        "create_title": "Nouveau template",
+        "edit": "Modifier",
+        "edit_title": "Modifier le template",
+        "delete": "Supprimer",
+        "delete_confirm": "Etes-vous sur de vouloir supprimer le template \"{{name}}\" ?",
+        "system": "Systeme",
+        "system_template": "Template systeme",
+        "system_template_info": "Ce template est utilise par le systeme et ne peut pas etre supprime",
+        "cannot_delete_system": "Les templates systeme ne peuvent pas etre supprimes",
+        "active": "Actif",
+        "inactive": "Inactif",
+        "activate": "Activer",
+        "deactivate": "Desactiver",
+        "preview": "Apercu",
+        "toggle_error": "Erreur lors du changement de statut",
+        "save_success": "Template enregistre avec succes",
+        "save_error": "Erreur lors de l'enregistrement",
+        "delete_success": "Template supprime avec succes",
+        "delete_error": "Erreur lors de la suppression",
+        "form": {
+          "name": "Nom du template",
+          "code": "Code (identifiant unique)",
+          "code_help": "Identifiant unique pour le template (lettres minuscules, chiffres et underscores)",
+          "description": "Description",
+          "subject": "Sujet de l'email",
+          "body": "Contenu HTML",
+          "active": "Template actif",
+          "is_active": "Template actif",
+          "variables_help": "Variables disponibles: {{booking_reference}}, {{booking_date}}, {{booking_time}}, {{participants}}, {{branch_name}}, {{branch_address}}, {{branch_phone}}, {{client_name}}, {{client_email}}"
+        }
       }
     },
     "permissions": {

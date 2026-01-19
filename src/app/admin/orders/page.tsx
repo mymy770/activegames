@@ -3,17 +3,18 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  ShoppingCart, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  ShoppingCart,
+  Clock,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   Search,
   X,
   PartyPopper,
   Target,
-  Gamepad2
+  Gamepad2,
+  Mail
 } from 'lucide-react'
 import { useOrders } from '@/hooks/useOrders'
 import { useBranches } from '@/hooks/useBranches'
@@ -267,6 +268,24 @@ export default function OrdersPage() {
     router.push(`/admin/clients?contact=${contactId}`)
   }
 
+  // Renvoyer l'email de confirmation
+  const handleResendEmail = async (orderId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/resend-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('Error resending email:', error)
+      return { success: false, error: 'Network error' }
+    }
+  }
+
   // Réactiver une réservation annulée - redirige vers l'agenda pour vérifier les disponibilités
   const handleReactivate = (orderId: string) => {
     const order = orders.find(o => o.id === orderId)
@@ -464,6 +483,22 @@ export default function OrdersPage() {
             <XCircle className="w-4 h-4" />
             {t('admin.orders.filter.cancelled')} ({stats.cancelled})
           </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Bouton Emails */}
+          <Link
+            href="/admin/emails"
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              isDark
+                ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                : 'bg-purple-500 hover:bg-purple-600 text-white'
+            }`}
+          >
+            <Mail className="w-4 h-4" />
+            {t('admin.orders.emails_button')}
+          </Link>
         </div>
 
         {/* Orders List */}
@@ -491,6 +526,7 @@ export default function OrdersPage() {
           onClose={closeOrderModal}
           onCancel={handleCancel}
           onRecreate={handleReactivate}
+          onResendEmail={handleResendEmail}
           onGoToAgenda={handleGoToAgenda}
           onGoToClient={handleViewClient}
           isDark={isDark}

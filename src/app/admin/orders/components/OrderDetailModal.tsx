@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   X,
   Calendar,
@@ -17,7 +18,9 @@ import {
   XCircle,
   AlertCircle,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Send,
+  Loader2
 } from 'lucide-react'
 import { useTranslation } from '@/contexts/LanguageContext'
 import type { OrderWithRelations } from '@/lib/supabase/types'
@@ -27,6 +30,7 @@ interface OrderDetailModalProps {
   onClose: () => void
   onCancel: (orderId: string) => void
   onRecreate?: (orderId: string) => void
+  onResendEmail?: (orderId: string) => Promise<{ success: boolean; error?: string }>
   onGoToAgenda: (date: string, bookingId?: string) => void
   onGoToClient: (contactId: string) => void
   isDark: boolean
@@ -37,11 +41,36 @@ export function OrderDetailModal({
   onClose,
   onCancel,
   onRecreate,
+  onResendEmail,
   onGoToAgenda,
   onGoToClient,
   isDark,
 }: OrderDetailModalProps) {
   const { t, locale } = useTranslation()
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
+  const handleResendEmail = async () => {
+    if (!onResendEmail || !order.customer_email) return
+
+    setSendingEmail(true)
+    setEmailError(null)
+
+    try {
+      const result = await onResendEmail(order.id)
+      if (result.success) {
+        setEmailSent(true)
+        setTimeout(() => setEmailSent(false), 3000)
+      } else {
+        setEmailError(result.error || t('admin.orders.resend_email_error'))
+      }
+    } catch {
+      setEmailError(t('admin.orders.resend_email_error'))
+    } finally {
+      setSendingEmail(false)
+    }
+  }
 
   // Helper pour obtenir la locale de date en fonction de la langue
   const getDateLocale = () => {
@@ -359,9 +388,9 @@ export function OrderDetailModal({
               {order.contact_id && (
                 <button
                   onClick={() => onGoToClient(order.contact_id!)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                    isDark 
-                      ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-400' 
+                  className={`w-full mb-3 flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                    isDark
+                      ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-400'
                       : 'bg-purple-50 hover:bg-purple-100 text-purple-600'
                   }`}
                 >
@@ -373,6 +402,61 @@ export function OrderDetailModal({
                     </p>
                   </div>
                   <ExternalLink className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Bouton Renvoyer Email de confirmation */}
+              {onResendEmail && order.status !== 'cancelled' && (
+                <button
+                  onClick={handleResendEmail}
+                  disabled={sendingEmail || !order.customer_email}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                    !order.customer_email
+                      ? isDark
+                        ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : emailSent
+                        ? isDark
+                          ? 'bg-green-600/20 text-green-400'
+                          : 'bg-green-50 text-green-600'
+                        : emailError
+                          ? isDark
+                            ? 'bg-red-600/20 text-red-400'
+                            : 'bg-red-50 text-red-600'
+                          : isDark
+                            ? 'bg-orange-600/20 hover:bg-orange-600/30 text-orange-400'
+                            : 'bg-orange-50 hover:bg-orange-100 text-orange-600'
+                  }`}
+                >
+                  {sendingEmail ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : emailSent ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
+                  <div className="text-left flex-1">
+                    <p className="font-medium">
+                      {emailSent
+                        ? t('admin.orders.resend_email_success')
+                        : t('admin.orders.resend_email')
+                      }
+                    </p>
+                    <p className={`text-xs ${
+                      !order.customer_email
+                        ? isDark ? 'text-gray-600' : 'text-gray-400'
+                        : emailError
+                          ? isDark ? 'text-red-400/70' : 'text-red-500/70'
+                          : isDark ? 'text-orange-400/70' : 'text-orange-500/70'
+                    }`}>
+                      {!order.customer_email
+                        ? t('admin.orders.no_email_address')
+                        : emailError
+                          ? emailError
+                          : t('admin.orders.resend_email_desc')
+                      }
+                    </p>
+                  </div>
                 </button>
               )}
             </div>

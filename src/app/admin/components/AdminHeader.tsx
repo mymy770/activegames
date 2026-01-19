@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { LogOut, User, ChevronDown, Sun, Moon, Users, Calendar, Menu, X, ShoppingCart, Shield, Globe, FileText, Lock, Crown } from 'lucide-react'
+import { LogOut, User, ChevronDown, Sun, Moon, Users, Calendar, Menu, X, ShoppingCart, Shield, Globe, FileText, Lock, Crown, Settings } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -374,6 +374,28 @@ export function AdminHeader({
                   </div>
                 )}
 
+                {/* Lien Paramètres - super_admin uniquement */}
+                {user.role === 'super_admin' && (
+                  <div className={`py-2 border-b ${
+                    theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+                  }`}>
+                    <Link
+                      href="/admin/settings"
+                      onClick={() => setShowUserMenu(false)}
+                      className={`w-full px-4 py-2 text-left flex items-center gap-2 transition-colors ${
+                        pathname === '/admin/settings'
+                          ? 'bg-blue-600 text-white'
+                          : theme === 'dark'
+                            ? 'text-gray-300 hover:bg-gray-700'
+                            : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4" />
+                      {t('admin.header.settings')}
+                    </Link>
+                  </div>
+                )}
+
                 <div className="py-2">
                   <button
                     onClick={() => {
@@ -582,6 +604,23 @@ export function AdminHeader({
                 >
                   <Lock className="w-4 h-4" />
                   <span>{t('admin.header.permissions')}</span>
+                </Link>
+              )}
+              {/* Lien Paramètres mobile - super_admin uniquement */}
+              {user.role === 'super_admin' && (
+                <Link
+                  href="/admin/settings"
+                  onClick={() => setShowMobileMenu(false)}
+                  className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
+                    pathname === '/admin/settings'
+                      ? 'bg-blue-600 text-white'
+                      : theme === 'dark'
+                        ? 'text-gray-300 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>{t('admin.header.settings')}</span>
                 </Link>
               )}
               <button
