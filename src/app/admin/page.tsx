@@ -64,7 +64,7 @@ export default function AdminPage() {
       // Si la branche sauvegardée n'est plus autorisée, réinitialiser avec la première
       branchesHook.selectBranch(branches[0].id)
     }
-  }, [finalSelectedBranchId, selectedBranchIdFromHook, isValidBranchId, branches.length, branchesHook])
+  }, [finalSelectedBranchId, selectedBranchIdFromHook, isValidBranchId, branches.length, branchesHook.selectBranch])
   
   const selectedBranchId = finalSelectedBranchId
   const setSelectedBranchId = (branchId: string | null) => {

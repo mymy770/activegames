@@ -73,7 +73,7 @@ export default function ClientsPage() {
   // Rediriger si pas authentifié
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/login')
+      router.push('/admin/login')
     }
   }, [user, authLoading, router])
 

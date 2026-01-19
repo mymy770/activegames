@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getClient } from '@/lib/supabase/client'
 import { Loader2 } from 'lucide-react'
@@ -18,51 +18,53 @@ function AdminLayoutContent({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isChecking, setIsChecking] = useState(true)
   const hasCheckedRef = useRef(false)
+  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
   const isLoginPage = pathname === '/admin/login'
 
   // Maintenir la session active en arrière-plan
   useSessionPersistence()
 
-  // Fonction de vérification stable
-  const checkAuth = useCallback(async () => {
+  // Vérification initiale - UNE SEULE FOIS au montage
+  useEffect(() => {
+    // Skip si page login
     if (isLoginPage) {
       setIsAuthenticated(true)
       setIsChecking(false)
       return
     }
 
-    // Si déjà vérifié et authentifié, ne pas revérifier
+    // Skip si déjà vérifié
     if (hasCheckedRef.current) {
       setIsChecking(false)
       return
     }
 
-    const supabase = getClient()
+    const checkAuth = async () => {
+      const supabase = getClient()
 
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser()
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
 
-      if (error || !user) {
+        if (error || !user) {
+          setIsAuthenticated(false)
+        } else {
+          setIsAuthenticated(true)
+          hasCheckedRef.current = true
+        }
+      } catch {
         setIsAuthenticated(false)
-      } else {
-        setIsAuthenticated(true)
-        hasCheckedRef.current = true
+      } finally {
+        setIsChecking(false)
       }
-    } catch {
-      setIsAuthenticated(false)
-    } finally {
-      setIsChecking(false)
     }
+
+    checkAuth()
   }, [isLoginPage])
 
-  // Vérification initiale - UNE SEULE FOIS au montage
+  // Écouter les changements d'authentification (login/logout) - UNE SEULE FOIS
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
-
-  // Écouter les changements d'authentification (login/logout)
-  useEffect(() => {
-    if (isLoginPage) {
+    // Skip si page login ou déjà souscrit
+    if (isLoginPage || subscriptionRef.current) {
       return
     }
 
@@ -82,8 +84,11 @@ function AdminLayoutContent({
       }
     )
 
+    subscriptionRef.current = subscription
+
     return () => {
       subscription.unsubscribe()
+      subscriptionRef.current = null
     }
   }, [isLoginPage])
 

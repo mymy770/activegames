@@ -66,7 +66,7 @@ export default function OrdersPage() {
     if (effectiveSelectedBranchId && !selectedBranchIdFromHook && branches.length === 1) {
       branchesHook.selectBranch(effectiveSelectedBranchId)
     }
-  }, [effectiveSelectedBranchId, selectedBranchIdFromHook, branches.length, branchesHook])
+  }, [effectiveSelectedBranchId, selectedBranchIdFromHook, branches.length, branchesHook.selectBranch])
   
   const selectedBranchId = effectiveSelectedBranchId
   const [searchQuery, setSearchQuery] = useState('')
@@ -109,7 +109,7 @@ export default function OrdersPage() {
   // Rediriger si pas authentifié
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/login')
+      router.push('/admin/login')
     }
   }, [user, authLoading, router])
 
@@ -118,7 +118,7 @@ export default function OrdersPage() {
     if (branches.length > 0 && !selectedBranchId) {
       branchesHook.selectBranch(branches[0].id)
     }
-  }, [branches, selectedBranchId, branchesHook])
+  }, [branches, selectedBranchId, branchesHook.selectBranch])
 
   // Gérer le paramètre order dans l'URL pour ouvrir une commande spécifique
   useEffect(() => {
