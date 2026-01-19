@@ -25,6 +25,9 @@ export function EmailTemplatesSection({ isDark }: EmailTemplatesSectionProps) {
   const { t } = useTranslation()
   const { templates, loading, error, createTemplate, updateTemplate, deleteTemplate, refresh } = useEmailTemplates()
 
+  // Filtrer les templates de termes et conditions (gérés dans leur propre section)
+  const emailTemplates = templates.filter(t => !t.code.startsWith('terms_'))
+
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [previewTemplate, setPreviewTemplate] = useState<EmailTemplate | null>(null)
@@ -178,14 +181,14 @@ export function EmailTemplatesSection({ isDark }: EmailTemplatesSectionProps) {
       <div className={`rounded-lg border overflow-hidden ${
         isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
       }`}>
-        {templates.length === 0 ? (
+        {emailTemplates.length === 0 ? (
           <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             <Code className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>{t('admin.settings.email_templates.no_templates')}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-700">
-            {templates.map((template) => (
+            {emailTemplates.map((template) => (
               <div
                 key={template.id}
                 className={`p-4 flex items-center justify-between ${
