@@ -147,15 +147,21 @@ export async function sendEmail(params: {
     }
 
     // Mettre à jour le log avec succès
-    console.log('[EMAIL sendEmail] Updating email log to sent...')
+    console.log('[EMAIL sendEmail] Updating email log to sent... emailLog.id:', emailLog.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { error: updateError } = await (supabase as any)
       .from('email_logs')
       .update({
         status: 'sent',
         sent_at: new Date().toISOString(),
       })
       .eq('id', emailLog.id)
+
+    if (updateError) {
+      console.error('[EMAIL sendEmail] Failed to update email log to sent:', updateError)
+    } else {
+      console.log('[EMAIL sendEmail] Email log updated to sent successfully')
+    }
 
     console.log('[EMAIL sendEmail] === SUCCESS ===')
     return { success: true, emailLogId: emailLog.id }
