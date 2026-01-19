@@ -1244,7 +1244,9 @@
       "access_denied_message": "Seuls les super administrateurs peuvent acceder aux parametres.",
       "sections": {
         "templates": "Templates d'emails",
-        "templates_desc": "Gerez les templates de notifications"
+        "templates_desc": "Gerez les templates de notifications",
+        "terms": "Conditions Generales",
+        "terms_desc": "Gerez les CGV pour les commandes en ligne"
       },
       "email_templates": {
         "title": "Templates d'emails",
@@ -1281,6 +1283,23 @@
           "is_active": "Template actif",
           "variables_help": "Variables disponibles: {{booking_reference}}, {{booking_date}}, {{booking_time}}, {{participants}}, {{branch_name}}, {{branch_address}}, {{branch_phone}}, {{client_name}}, {{client_email}}"
         }
+      },
+      "terms": {
+        "title": "Conditions Generales",
+        "subtitle": "Gerez les conditions generales affichees lors des reservations en ligne",
+        "type_game": "Jeux",
+        "type_event": "Evenements",
+        "desc_game": "Conditions generales pour les reservations de jeux : regles de participation, securite, politique d'annulation.",
+        "desc_event": "Conditions pour les evenements : regles de la salle, restauration, allergies, politique d'annulation.",
+        "not_configured": "Non configure",
+        "run_migration": "Executez la migration SQL",
+        "edit_title": "Modifier les CGV",
+        "content": "Contenu",
+        "fetch_error": "Erreur de chargement des templates CGV",
+        "save_error": "Erreur lors de l'enregistrement",
+        "toggle_error": "Erreur lors du changement de statut",
+        "usage_title": "Comment ces templates sont utilises",
+        "usage_desc": "Ces conditions sont affichees lorsque les clients cochent la case \"J'accepte les conditions generales\" lors de la reservation en ligne, et sont incluses en bas des emails de confirmation."
       }
     },
     "permissions": {

@@ -1188,7 +1188,9 @@
       "access_denied_message": "Only super administrators can access settings.",
       "sections": {
         "templates": "Email Templates",
-        "templates_desc": "Manage notification templates"
+        "templates_desc": "Manage notification templates",
+        "terms": "Terms & Conditions",
+        "terms_desc": "Manage terms for online orders"
       },
       "email_templates": {
         "title": "Email Templates",
@@ -1225,6 +1227,23 @@
           "is_active": "Template active",
           "variables_help": "Available variables: {{booking_reference}}, {{booking_date}}, {{booking_time}}, {{participants}}, {{branch_name}}, {{branch_address}}, {{branch_phone}}, {{client_name}}, {{client_email}}"
         }
+      },
+      "terms": {
+        "title": "Terms & Conditions",
+        "subtitle": "Manage terms and conditions shown during online booking",
+        "type_game": "Games",
+        "type_event": "Events",
+        "desc_game": "General conditions for game bookings: participation rules, safety, cancellation policy.",
+        "desc_event": "Conditions for events: room rules, food service, allergies, cancellation policy.",
+        "not_configured": "Not configured",
+        "run_migration": "Run SQL migration",
+        "edit_title": "Edit Terms",
+        "content": "Content",
+        "fetch_error": "Error loading terms templates",
+        "save_error": "Error saving template",
+        "toggle_error": "Error changing status",
+        "usage_title": "How these templates are used",
+        "usage_desc": "These terms are displayed when customers check the \"I accept the terms and conditions\" box during online booking, and are included at the bottom of confirmation emails."
       }
     },
     "permissions": {

@@ -1308,7 +1308,9 @@
       "access_denied_message": "רק מנהלי-על יכולים לגשת להגדרות.",
       "sections": {
         "templates": "תבניות אימייל",
-        "templates_desc": "נהלו תבניות התראות"
+        "templates_desc": "נהלו תבניות התראות",
+        "terms": "תנאים והגבלות",
+        "terms_desc": "ניהול תנאים להזמנות מקוונות"
       },
       "email_templates": {
         "title": "תבניות אימייל",
@@ -1345,6 +1347,23 @@
           "is_active": "תבנית פעילה",
           "variables_help": "משתנים זמינים: {{booking_reference}}, {{booking_date}}, {{booking_time}}, {{participants}}, {{branch_name}}, {{branch_address}}, {{branch_phone}}, {{client_name}}, {{client_email}}"
         }
+      },
+      "terms": {
+        "title": "תנאים והגבלות",
+        "subtitle": "נהלו תנאים והגבלות המוצגים בהזמנה מקוונת",
+        "type_game": "משחקים",
+        "type_event": "אירועים",
+        "desc_game": "תנאים כלליים להזמנות משחקים: כללי השתתפות, בטיחות, מדיניות ביטול.",
+        "desc_event": "תנאים לאירועים: כללי חדר, כיבוד, אלרגיות, מדיניות ביטול.",
+        "not_configured": "לא מוגדר",
+        "run_migration": "הרץ מיגרציית SQL",
+        "edit_title": "ערוך תנאים",
+        "content": "תוכן",
+        "fetch_error": "שגיאה בטעינת תבניות התנאים",
+        "save_error": "שגיאה בשמירת התבנית",
+        "toggle_error": "שגיאה בשינוי סטטוס",
+        "usage_title": "כיצד משתמשים בתבניות אלו",
+        "usage_desc": "תנאים אלו מוצגים כאשר לקוחות מסמנים את תיבת \"אני מסכים לתנאים והגבלות\" בהזמנה מקוונת, ונכללים בתחתית מיילי האישור."
       }
     },
     "permissions": {

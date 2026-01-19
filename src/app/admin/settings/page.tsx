@@ -8,16 +8,18 @@ import {
   Settings,
   Mail,
   FileText,
-  ChevronRight
+  ChevronRight,
+  ScrollText
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useBranches } from '@/hooks/useBranches'
 import { useTranslation } from '@/contexts/LanguageContext'
 import { AdminHeader } from '../components/AdminHeader'
 import { EmailTemplatesSection } from './components/EmailTemplatesSection'
+import { TermsConditionsSection } from './components/TermsConditionsSection'
 import { createClient } from '@/lib/supabase/client'
 
-type SettingsSection = 'templates' | 'credentials'
+type SettingsSection = 'templates' | 'terms' | 'credentials'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -89,6 +91,12 @@ export default function SettingsPage() {
       icon: FileText,
       label: t('admin.settings.sections.templates'),
       description: t('admin.settings.sections.templates_desc')
+    },
+    {
+      id: 'terms',
+      icon: ScrollText,
+      label: t('admin.settings.sections.terms'),
+      description: t('admin.settings.sections.terms_desc')
     }
     // Future: Add more sections like 'credentials' for SMTP settings
   ]
@@ -174,6 +182,9 @@ export default function SettingsPage() {
         <div className="flex-1 p-6">
           {activeSection === 'templates' && (
             <EmailTemplatesSection isDark={isDark} />
+          )}
+          {activeSection === 'terms' && (
+            <TermsConditionsSection isDark={isDark} />
           )}
         </div>
       </div>
