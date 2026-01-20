@@ -413,7 +413,7 @@ export default function ReservationPage() {
           event_type: bookingData.eventType || null,
           event_celebrant_age: bookingData.eventAge || null,
           terms_accepted: bookingData.termsAccepted,
-          locale: locale, // Langue pour l'email de confirmation
+          locale: locale === 'he' ? 'he' : 'en', // Langue pour l'email (he ou en seulement)
         }),
       })
       
