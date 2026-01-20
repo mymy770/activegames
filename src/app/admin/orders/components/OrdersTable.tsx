@@ -381,7 +381,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
             </span>
           )}
         </div>
-        <div className="col-span-1 flex flex-col gap-1">
+        <div className="col-span-1">
           <FilterDropdown
             label={t('admin.orders.table.source')}
             options={sourceOptions}
@@ -389,6 +389,8 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
             onChange={setSourceFilter}
             isDark={isDark}
           />
+        </div>
+        <div className="col-span-1">
           <FilterDropdown
             label="CGV"
             options={cgvOptions}
@@ -397,7 +399,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
             isDark={isDark}
           />
         </div>
-        <div className="col-span-2 flex items-center justify-between">
+        <div className="col-span-1 flex items-center justify-between">
           <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
             {t('admin.orders.table.reference')}
           </span>
@@ -517,8 +519,8 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
                   )}
                 </div>
 
-                {/* Source + CGV Badge */}
-                <div className="col-span-1 flex flex-col gap-1">
+                {/* Source */}
+                <div className="col-span-1">
                   <span className={`text-xs px-2 py-0.5 rounded w-fit ${
                     order.source === 'admin_agenda'
                       ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
@@ -526,7 +528,10 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
                   }`}>
                     {order.source === 'admin_agenda' ? 'Admin' : 'Site'}
                   </span>
-                  {/* Badge CGV pour orders admin */}
+                </div>
+
+                {/* CGV Badge */}
+                <div className="col-span-1">
                   {order.source === 'admin_agenda' && (
                     <span className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 w-fit ${
                       order.cgv_validated_at
@@ -543,7 +548,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
                 </div>
 
                 {/* Référence */}
-                <div className="col-span-2 text-xs font-mono">
+                <div className="col-span-1 text-xs font-mono">
                   <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                     {order.booking?.reference_code || order.request_reference}
                   </span>

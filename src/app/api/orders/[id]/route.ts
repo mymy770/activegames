@@ -310,11 +310,25 @@ export async function PATCH(
               .eq('id', order.branch_id)
               .single()
 
+            // Récupérer la langue préférée du contact si disponible
+            let contactLocale: 'he' | 'fr' | 'en' = 'he'
+            if (order.contact_id) {
+              const { data: contactData } = await supabase
+                .from('contacts')
+                .select('preferred_locale')
+                .eq('id', order.contact_id)
+                .single() as unknown as { data: { preferred_locale: string | null } | null }
+              if (contactData?.preferred_locale) {
+                contactLocale = contactData.preferred_locale as 'he' | 'fr' | 'en'
+              }
+            }
+
             if (bookingData && branchData) {
               sendBookingConfirmationEmail({
                 booking: bookingData as Booking,
                 branch: branchData as Branch,
-                triggeredBy: user.id
+                triggeredBy: user.id,
+                locale: contactLocale
               }).catch(err => {
                 console.error('Failed to send confirmation email on reactivation:', err)
               })
@@ -501,11 +515,25 @@ export async function PATCH(
           .eq('id', order.branch_id)
           .single()
 
+        // Récupérer la langue préférée du contact si disponible
+        let contactLocale: 'he' | 'fr' | 'en' = 'he'
+        if (order.contact_id) {
+          const { data: contactData } = await supabase
+            .from('contacts')
+            .select('preferred_locale')
+            .eq('id', order.contact_id)
+            .single()
+          if (contactData?.preferred_locale) {
+            contactLocale = contactData.preferred_locale as 'he' | 'fr' | 'en'
+          }
+        }
+
         if (bookingData && branchData) {
           sendBookingConfirmationEmail({
             booking: bookingData as Booking,
             branch: branchData as Branch,
-            triggeredBy: user.id
+            triggeredBy: user.id,
+            locale: contactLocale
           }).catch(err => {
             console.error('Failed to send confirmation email on reactivation (new booking):', err)
           })

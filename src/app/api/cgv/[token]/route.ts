@@ -14,7 +14,7 @@ export async function GET(
     const { token } = await params
     const supabase = createServiceRoleClient()
 
-    // Récupérer la commande par token
+    // Récupérer la commande par token avec le contact pour la langue
     const { data: orderData, error } = await supabase
       .from('orders')
       .select(`
@@ -27,12 +27,14 @@ export async function GET(
         participants_count,
         event_type,
         cgv_validated_at,
-        branch_id
+        branch_id,
+        contact_id,
+        booking_type
       `)
       .eq('cgv_token', token)
       .single()
 
-    const order = orderData as Pick<OrderRow, 'id' | 'request_reference' | 'customer_first_name' | 'customer_last_name' | 'requested_date' | 'requested_time' | 'participants_count' | 'event_type' | 'cgv_validated_at' | 'branch_id'> | null
+    const order = orderData as Pick<OrderRow, 'id' | 'request_reference' | 'customer_first_name' | 'customer_last_name' | 'requested_date' | 'requested_time' | 'participants_count' | 'event_type' | 'cgv_validated_at' | 'branch_id'> & { contact_id: string | null; booking_type: string | null } | null
 
     if (error || !order) {
       return NextResponse.json(
@@ -53,6 +55,19 @@ export async function GET(
       if (branch) branchName = branch.name
     }
 
+    // Récupérer la langue préférée du contact
+    let preferredLocale: 'he' | 'fr' | 'en' = 'he'
+    if (order.contact_id) {
+      const { data: contactData } = await supabase
+        .from('contacts')
+        .select('preferred_locale')
+        .eq('id', order.contact_id)
+        .single<{ preferred_locale: string | null }>()
+      if (contactData?.preferred_locale) {
+        preferredLocale = contactData.preferred_locale as 'he' | 'fr' | 'en'
+      }
+    }
+
     return NextResponse.json({
       success: true,
       order: {
@@ -65,7 +80,9 @@ export async function GET(
         participants_count: order.participants_count,
         event_type: order.event_type,
         cgv_validated_at: order.cgv_validated_at,
-        branch_name: branchName
+        branch_name: branchName,
+        booking_type: order.booking_type || 'game',
+        preferred_locale: preferredLocale
       }
     })
 

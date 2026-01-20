@@ -30,6 +30,7 @@ export function ClientModal({
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [notesClient, setNotesClient] = useState('')
+  const [preferredLocale, setPreferredLocale] = useState<'he' | 'fr' | 'en'>('he')
   const [isCompany, setIsCompany] = useState(false)
   const [companyName, setCompanyName] = useState('')
   const [vatId, setVatId] = useState('')
@@ -47,6 +48,7 @@ export function ClientModal({
         setPhone(contact.phone || '')
         setEmail(contact.email || '')
         setNotesClient(contact.notes_client || '')
+        setPreferredLocale(contact.preferred_locale || 'he')
         setIsCompany(contact.client_type === 'company')
         setCompanyName(contact.company_name || '')
         setVatId(contact.vat_id || '')
@@ -57,6 +59,7 @@ export function ClientModal({
         setPhone('')
         setEmail('')
         setNotesClient('')
+        setPreferredLocale('he')
         setIsCompany(false)
         setCompanyName('')
         setVatId('')
@@ -119,6 +122,7 @@ export function ClientModal({
           phone: formattedPhone,
           email: email.trim() || null,
           notes_client: notesClient.trim() || null,
+          preferred_locale: preferredLocale,
           client_type: clientType,
           company_name: isCompany ? companyName.trim() : null,
           vat_id: isCompany ? vatId.trim() : null,
@@ -139,6 +143,7 @@ export function ClientModal({
           phone: formattedPhone,
           email: email.trim() || null,
           notes_client: notesClient.trim() || null,
+          preferred_locale: preferredLocale,
           source: 'admin_agenda',
           client_type: clientType,
           company_name: isCompany ? companyName.trim() : null,
@@ -372,6 +377,45 @@ export function ClientModal({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Langue préférée pour les emails */}
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              <Mail className="w-4 h-4 inline mr-1" />
+              Email Language
+            </label>
+            <div className="flex items-center gap-2">
+              {([
+                { code: 'he', flag: '🇮🇱', label: 'עברית (Hebrew)' },
+                { code: 'fr', flag: '🇫🇷', label: 'Français (French)' },
+                { code: 'en', flag: '🇬🇧', label: 'English' }
+              ] as const).map(({ code, flag, label }) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setPreferredLocale(code)}
+                  title={label}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                    preferredLocale === code
+                      ? isDark
+                        ? 'bg-blue-600/30 border-blue-500 ring-2 ring-blue-500'
+                        : 'bg-blue-100 border-blue-500 ring-2 ring-blue-500'
+                      : isDark
+                        ? 'bg-gray-700 border-gray-600 hover:bg-gray-600'
+                        : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="text-xl">{flag}</span>
+                  <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {code === 'he' ? 'עברית' : code === 'fr' ? 'Français' : 'English'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className={`mt-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              All emails (confirmations, reminders) will be sent in this language
+            </p>
           </div>
 
           {/* Notes client */}

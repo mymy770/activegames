@@ -64,6 +64,8 @@ export interface CreateBookingData {
   // Pour réactiver une commande annulée
   reactivateOrderId?: string
   reactivateReference?: string // Référence à réutiliser
+  // Langue préférée du contact pour les emails
+  locale?: 'he' | 'fr' | 'en'
 }
 
 export function useBookings(branchId: string | null, date?: string) {
@@ -316,7 +318,7 @@ export function useBookings(branchId: string | null, date?: string) {
           reactivateOrderId: data.reactivateOrderId,
           slots: data.slots,
           game_sessions: data.game_sessions,
-          locale: 'fr', // Langue par défaut pour l'email
+          locale: data.locale || 'he', // Langue préférée du contact pour l'email
         }),
       })
 

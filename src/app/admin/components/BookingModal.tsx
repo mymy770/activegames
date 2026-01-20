@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Loader2, Users, Clock, User, Phone, Mail, MessageSquare, Gamepad2, PartyPopper, Palette, Home, Calendar, ChevronLeft, ChevronRight, Trash2, Edit2, RefreshCw, AlertTriangle, ChevronDown, Building2, Zap, Target } from 'lucide-react'
+import { X, Loader2, Users, Clock, User, Phone, Mail, MessageSquare, Gamepad2, PartyPopper, Palette, Home, Calendar, ChevronLeft, ChevronRight, Trash2, Edit2, RefreshCw, AlertTriangle, ChevronDown, Building2, Zap, Target, FileText } from 'lucide-react'
 import type { CreateBookingData, BookingWithSlots } from '@/hooks/useBookings'
 import { ContactFieldAutocomplete } from './ContactFieldAutocomplete'
 import { useContacts } from '@/hooks/useContacts'
@@ -47,6 +47,9 @@ interface BookingModalProps {
   canCreate?: boolean // Permission de créer une réservation
   canEdit?: boolean // Permission de modifier une réservation
   canDelete?: boolean // Permission de supprimer une réservation
+  // Navigation vers la commande
+  onViewOrder?: (orderId: string) => void // Callback pour voir la commande dans la zone Orders
+  orderId?: string | null // ID de la commande liée au booking
 }
 
 type BookingType = 'GAME' | 'EVENT'
@@ -101,7 +104,9 @@ export function BookingModal({
   totalSlots = 14,
   canCreate = true,
   canEdit = true,
-  canDelete = true
+  canDelete = true,
+  onViewOrder,
+  orderId
 }: BookingModalProps) {
   const { t, locale } = useTranslation()
 
@@ -161,6 +166,7 @@ export function BookingModal({
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
+  const [preferredLocale, setPreferredLocale] = useState<'he' | 'fr' | 'en'>('he') // Langue préférée du contact pour les emails
   const [contactId, setContactId] = useState('') // ID unique du contact (auto-généré)
   const [color, setColor] = useState(COLORS[0].value) // Couleur par défaut bleu
 
@@ -262,6 +268,7 @@ export function BookingModal({
     setPhone(contact.phone || '')
     setEmail(contact.email || '')
     setNotes(contact.notes_client || '')
+    setPreferredLocale(contact.preferred_locale || 'he') // Charger la langue préférée du contact
     setIsEditingContact(false) // Désactiver le mode édition quand on sélectionne un nouveau contact
   }
 
@@ -319,6 +326,7 @@ export function BookingModal({
     setPhoneError(null)
     setEmail('')
     setNotes('')
+    setPreferredLocale('he') // Réinitialiser la langue par défaut à hébreu
   }
 
   // Fonction utilitaire pour formater une date en YYYY-MM-DD (sans conversion UTC)
@@ -739,6 +747,8 @@ export function BookingModal({
               setIsEditingEvent(false) // Les données de l'événement doivent être gelées pour une réservation existante
               // Charger les notes du contact (notes_client fait partie du contact)
               setNotes(contact.notes_client || '')
+              // Charger la langue préférée du contact
+              setPreferredLocale(contact.preferred_locale || 'he')
               // Ne pas écraser les champs si le contact existe (on garde les snapshot)
               // Mais on peut les pré-remplir avec les infos du contact si les snapshot sont vides
               if (!editingBooking.customer_first_name && contact.first_name) {
@@ -848,6 +858,7 @@ export function BookingModal({
                   setPhone(contact.phone || '')
                   setEmail(contact.email || '')
                   setNotes(contact.notes_client || '')
+                  setPreferredLocale(contact.preferred_locale || 'he')
                   setIsEditingContact(false) // Champs gelés car contact importé
                 } else {
                   // Fallback si le contact n'existe plus
@@ -1286,7 +1297,8 @@ export function BookingModal({
           normalize(selectedContact.last_name) !== normalize(lastName) ||
           normalize(selectedContact.phone) !== normalize(phone) ||
           normalize(selectedContact.email) !== normalize(email) ||
-          normalize(selectedContact.notes_client) !== normalize(notes)
+          normalize(selectedContact.notes_client) !== normalize(notes) ||
+          (selectedContact.preferred_locale || 'he') !== preferredLocale
 
         if (hasChanges) {
           const updated = await updateContact(selectedContact.id, {
@@ -1295,6 +1307,7 @@ export function BookingModal({
             phone: phone.trim(),
             email: email.trim() || null,
             notes_client: notes.trim() || null,
+            preferred_locale: preferredLocale,
           })
           if (updated) {
             contactIdToLink = updated.id
@@ -1325,6 +1338,7 @@ export function BookingModal({
             email: email.trim() || null,
             notes_client: notes.trim() || null,
             source: 'admin_agenda',
+            preferred_locale: preferredLocale,
           })
           
           if (newContact) {
@@ -1343,6 +1357,7 @@ export function BookingModal({
             email: email.trim() || null,
             notes_client: notes.trim() || null,
             source: 'admin_agenda',
+            preferred_locale: preferredLocale,
           })
 
           if (newContact) {
@@ -1727,7 +1742,9 @@ export function BookingModal({
         game_sessions: game_sessions.length > 0 ? game_sessions : [],
         // Données de réactivation si présentes
         reactivateOrderId,
-        reactivateReference
+        reactivateReference,
+        // Langue préférée du contact pour les emails
+        locale: preferredLocale
       }
 
       const success = await onSubmit(bookingData)
@@ -3754,6 +3771,38 @@ export function BookingModal({
                 )}
               </div>
             </div>
+
+            {/* Sélecteur de langue préférée */}
+            <div className="flex items-center gap-2 mt-3">
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {t('admin.booking_modal.contact.preferred_language')}:
+              </span>
+              <div className="flex gap-1">
+                {([
+                  { code: 'he', flag: '🇮🇱', label: 'עברית' },
+                  { code: 'fr', flag: '🇫🇷', label: 'Français' },
+                  { code: 'en', flag: '🇬🇧', label: 'English' }
+                ] as const).map(({ code, flag, label }) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setPreferredLocale(code)}
+                    title={label}
+                    className={`text-lg px-1.5 py-0.5 rounded transition-all ${
+                      preferredLocale === code
+                        ? isDark
+                          ? 'bg-blue-600/30 ring-2 ring-blue-500'
+                          : 'bg-blue-100 ring-2 ring-blue-500'
+                        : isDark
+                          ? 'hover:bg-gray-700 opacity-50 hover:opacity-100'
+                          : 'hover:bg-gray-100 opacity-50 hover:opacity-100'
+                    }`}
+                  >
+                    {flag}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Notes */}
@@ -3820,7 +3869,7 @@ export function BookingModal({
 
         {/* Footer */}
         <div className={`flex items-center justify-between gap-3 p-6 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div>
+          <div className="flex items-center gap-2">
             {editingBooking && onDelete && (
               <button
                 type="button"
@@ -3841,6 +3890,22 @@ export function BookingModal({
             )}
           </div>
           <div className="flex items-center gap-3">
+            {/* Bouton voir la commande - à côté de Cancel pour éviter les clics accidentels près de Delete */}
+            {editingBooking && onViewOrder && orderId && (
+              <button
+                type="button"
+                onClick={() => onViewOrder(orderId)}
+                disabled={loading}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                  isDark
+                    ? 'text-blue-400 hover:bg-blue-900/20 hover:text-blue-300'
+                    : 'text-blue-600 hover:bg-blue-50 hover:text-blue-700'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                {t('admin.booking_modal.actions.view_order') || 'Voir commande'}
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

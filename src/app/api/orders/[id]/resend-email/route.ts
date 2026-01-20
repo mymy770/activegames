@@ -78,11 +78,26 @@ export async function POST(
     const booking = order.booking as Booking
     const branch = order.branch as Branch
 
-    // Envoyer l'email
+    // Récupérer la langue préférée du contact si disponible
+    let contactLocale: 'he' | 'fr' | 'en' = 'he'
+    if (order.contact_id) {
+      const { data: contactData } = await supabase
+        .from('contacts')
+        .select('preferred_locale')
+        .eq('id', order.contact_id)
+        .single<{ preferred_locale: string | null }>()
+      if (contactData?.preferred_locale) {
+        contactLocale = contactData.preferred_locale as 'he' | 'fr' | 'en'
+      }
+    }
+
+    // Envoyer l'email avec le cgvToken si c'est une commande admin
     const result = await sendBookingConfirmationEmail({
       booking,
       branch,
       triggeredBy: user.id,
+      locale: contactLocale,
+      cgvToken: order.source === 'admin_agenda' ? order.cgv_token : undefined,
     })
 
     if (!result.success) {

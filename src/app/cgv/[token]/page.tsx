@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Image from 'next/image'
-import { Loader2, CheckCircle, AlertCircle, FileText, Calendar, Users } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, FileText, Calendar, Users, X } from 'lucide-react'
 
 interface OrderInfo {
   id: string
@@ -16,6 +16,8 @@ interface OrderInfo {
   event_type: string | null
   cgv_validated_at: string | null
   branch_name: string
+  booking_type: 'game' | 'event'
+  preferred_locale: 'he' | 'fr' | 'en'
 }
 
 export default function CGVValidationPage() {
@@ -28,10 +30,38 @@ export default function CGVValidationPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [cgvAccepted, setCgvAccepted] = useState(false)
+  const [showTermsModal, setShowTermsModal] = useState(false)
+  const [termsContent, setTermsContent] = useState<{ game: string | null; event: string | null }>({ game: null, event: null })
+  const [termsLoading, setTermsLoading] = useState(false)
 
   useEffect(() => {
     fetchOrder()
   }, [token])
+
+  // Charger les CGV quand on a les infos de la commande
+  useEffect(() => {
+    if (order && !termsContent.game && !termsContent.event) {
+      fetchTerms(order.preferred_locale)
+    }
+  }, [order])
+
+  const fetchTerms = async (locale: string) => {
+    setTermsLoading(true)
+    try {
+      const response = await fetch(`/api/terms?lang=${locale}`)
+      if (response.ok) {
+        const data = await response.json()
+        setTermsContent({
+          game: data.game,
+          event: data.event
+        })
+      }
+    } catch (err) {
+      console.error('Error fetching terms:', err)
+    } finally {
+      setTermsLoading(false)
+    }
+  }
 
   const fetchOrder = async () => {
     try {
@@ -242,13 +272,13 @@ export default function CGVValidationPage() {
                 />
                 <span className="text-gray-300 text-sm leading-relaxed">
                   J'ai lu et j'accepte les{' '}
-                  <a
-                    href="/cgv"
-                    target="_blank"
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(true)}
                     className="text-cyan-400 hover:text-cyan-300 underline"
                   >
                     conditions générales de vente
-                  </a>
+                  </button>
                 </span>
               </label>
             </div>
@@ -283,6 +313,115 @@ export default function CGVValidationPage() {
           {order.branch_name} • Active Games World
         </p>
       </div>
+
+      {/* Modal CGV */}
+      {showTermsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowTermsModal(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+
+          {/* Modal */}
+          <div
+            className="relative bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h2 className="text-lg font-semibold text-white">
+                Conditions Générales de Vente
+              </h2>
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {termsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+                </div>
+              ) : (
+                <div className="terms-content-wrapper">
+                  {order.booking_type === 'event' && termsContent.event ? (
+                    <div
+                      className="terms-html-content"
+                      dangerouslySetInnerHTML={{ __html: termsContent.event }}
+                    />
+                  ) : termsContent.game ? (
+                    <div
+                      className="terms-html-content"
+                      dangerouslySetInnerHTML={{ __html: termsContent.game }}
+                    />
+                  ) : (
+                    <p className="text-gray-400 text-center py-8">
+                      Les conditions générales sont en cours de chargement...
+                    </p>
+                  )}
+                </div>
+              )}
+              <style jsx global>{`
+                .terms-html-content {
+                  color: #e5e7eb;
+                  line-height: 1.6;
+                }
+                .terms-html-content h2 {
+                  color: #fff;
+                  font-size: 1.25rem;
+                  font-weight: 600;
+                  margin-top: 1.5rem;
+                  margin-bottom: 0.75rem;
+                }
+                .terms-html-content h2:first-child {
+                  margin-top: 0;
+                }
+                .terms-html-content h3 {
+                  color: #fff;
+                  font-size: 1.1rem;
+                  font-weight: 600;
+                  margin-top: 1.25rem;
+                  margin-bottom: 0.5rem;
+                }
+                .terms-html-content ul {
+                  list-style-type: disc;
+                  padding-left: 1.5rem;
+                  margin: 0.5rem 0;
+                }
+                .terms-html-content li {
+                  margin-bottom: 0.25rem;
+                }
+                .terms-html-content p {
+                  margin-bottom: 0.75rem;
+                }
+                .terms-html-content strong {
+                  color: #fff;
+                  font-weight: 600;
+                }
+                .terms-html-content hr {
+                  border-color: #374151;
+                  margin: 1.5rem 0;
+                }
+              `}</style>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-700">
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

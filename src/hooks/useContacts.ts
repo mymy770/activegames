@@ -35,6 +35,7 @@ export interface CreateContactData {
   client_type?: ClientType
   company_name?: string | null
   vat_id?: string | null
+  preferred_locale?: 'he' | 'fr' | 'en'
 }
 
 export interface UpdateContactData extends Partial<CreateContactData> {

@@ -104,6 +104,7 @@ export default function AdminPage() {
   const [modalDefaultBookingType, setModalDefaultBookingType] = useState<'GAME' | 'EVENT'>('GAME')
   const [modalDefaultGameArea, setModalDefaultGameArea] = useState<'ACTIVE' | 'LASER' | undefined>(undefined)
   const [editingBooking, setEditingBooking] = useState<BookingWithSlots | null>(null)
+  const [editingBookingOrderId, setEditingBookingOrderId] = useState<string | null>(null)
   const [agendaSearchQuery, setAgendaSearchQuery] = useState('')
   const [showCalendarModal, setShowCalendarModal] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth())
@@ -302,7 +303,7 @@ export default function AdminPage() {
           const targetDate = new Date(bookingDate)
           setSelectedDate(targetDate)
         }
-        
+
         // Ouvrir le modal avec cette réservation
         const startTime = booking.game_start_datetime ? new Date(booking.game_start_datetime) : new Date(booking.start_datetime)
         setModalInitialHour(startTime.getHours())
@@ -310,7 +311,21 @@ export default function AdminPage() {
         setEditingBooking(booking)
         setModalDefaultBookingType(booking.type as 'GAME' | 'EVENT')
         setShowBookingModal(true)
-        
+
+        // Chercher l'order_id correspondant
+        const supabase = createClient()
+        supabase
+          .from('orders')
+          .select('id')
+          .eq('booking_id', booking.id)
+          .single()
+          .then(({ data: orderData }) => {
+            const order = orderData as { id: string } | null
+            if (order) {
+              setEditingBookingOrderId(order.id)
+            }
+          })
+
         // Nettoyer l'URL
         router.replace('/admin')
       }
@@ -658,7 +673,7 @@ export default function AdminPage() {
   const uiSegments = buildUISegments()
 
   // Ouvrir le modal de réservation
-  const openBookingModal = (hour?: number, minute?: number, booking?: BookingWithSlots, defaultType: 'GAME' | 'EVENT' = 'GAME', defaultGameArea?: 'ACTIVE' | 'LASER') => {
+  const openBookingModal = async (hour?: number, minute?: number, booking?: BookingWithSlots, defaultType: 'GAME' | 'EVENT' = 'GAME', defaultGameArea?: 'ACTIVE' | 'LASER') => {
     // Vérifier les permissions:
     // - Pour une réservation existante: view suffit pour ouvrir (en lecture seule)
     // - Pour une nouvelle réservation: create est requis
@@ -667,6 +682,18 @@ export default function AdminPage() {
 
     if (booking) {
       setEditingBooking(booking)
+      // Chercher l'order_id correspondant au booking
+      setEditingBookingOrderId(null) // Reset pendant la recherche
+      const supabase = createClient()
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('booking_id', booking.id)
+        .single()
+      const order = orderData as { id: string } | null
+      if (order) {
+        setEditingBookingOrderId(order.id)
+      }
       // Extraire l'heure de début de la réservation
       const startTime = new Date(booking.game_start_datetime || booking.start_datetime)
       setModalInitialHour(startTime.getHours())
@@ -681,6 +708,7 @@ export default function AdminPage() {
       }
     } else {
       setEditingBooking(null)
+      setEditingBookingOrderId(null)
       setModalInitialHour(hour ?? 10)
       setModalInitialMinute(minute ?? 0)
       setModalDefaultBookingType(defaultType) // Définir le type selon où on clique
@@ -707,6 +735,7 @@ export default function AdminPage() {
     const success = await deleteBooking(id)
     if (success) {
       setEditingBooking(null)
+      setEditingBookingOrderId(null)
       setShowBookingModal(false)
     }
     return success
@@ -3047,6 +3076,7 @@ export default function AdminPage() {
           onClose={() => {
             setShowBookingModal(false)
             setEditingBooking(null)
+            setEditingBookingOrderId(null)
           }}
           onSubmit={handleSubmitBooking}
           onDelete={handleDeleteBooking}
@@ -3074,6 +3104,11 @@ export default function AdminPage() {
           canCreate={canCreateAgenda}
           canEdit={canEditAgenda}
           canDelete={canDeleteAgenda}
+          onViewOrder={(orderId) => {
+            // Naviguer vers la page orders et ouvrir la commande
+            router.push(`/admin/orders?order=${encodeURIComponent(orderId)}`)
+          }}
+          orderId={editingBookingOrderId}
         />
       )}
 

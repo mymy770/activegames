@@ -128,21 +128,30 @@ async function findOrCreateContact(
   phone: string,
   email: string | null,
   notes: string | null,
-  ipAddress?: string
+  ipAddress?: string,
+  locale?: 'he' | 'fr' | 'en'
 ): Promise<{ contactId: string; wasCreated: boolean }> {
 
-  console.log("[ORDER API] findOrCreateContact - phone:", phone, "branchId:", branchId)
+  console.log("[ORDER API] findOrCreateContact - phone:", phone, "branchId:", branchId, "locale:", locale)
 
   // Chercher un contact existant par téléphone
   const { data: existing } = await supabase
     .from('contacts')
-    .select('id')
+    .select('id, preferred_locale')
     .eq('branch_id_main', branchId)
     .eq('phone', phone)
     .single()
 
   if (existing) {
     console.log("[ORDER API] Existing contact found:", existing.id)
+    // Mettre à jour la langue préférée si fournie et différente
+    if (locale && existing.preferred_locale !== locale) {
+      await supabase
+        .from('contacts')
+        .update({ preferred_locale: locale })
+        .eq('id', existing.id)
+      console.log("[ORDER API] Updated contact preferred_locale to:", locale)
+    }
     return { contactId: existing.id, wasCreated: false }
   }
 
@@ -158,7 +167,8 @@ async function findOrCreateContact(
       phone,
       email: email || null,
       notes_client: notes || null,
-      source: 'website'
+      source: 'website',
+      preferred_locale: locale || 'he'
     })
     .select('*')
     .single()
@@ -262,7 +272,7 @@ export async function POST(request: NextRequest) {
     // Formater le téléphone
     const formattedPhone = formatIsraeliPhone(customer_phone)
 
-    // 1. Trouver ou créer le contact
+    // 1. Trouver ou créer le contact (avec la langue préférée du site)
     const { contactId } = await findOrCreateContact(
       branch_id,
       customer_first_name,
@@ -270,7 +280,8 @@ export async function POST(request: NextRequest) {
       formattedPhone,
       customer_email || null,
       customer_notes || null,
-      ipAddress
+      ipAddress,
+      locale as 'he' | 'fr' | 'en'
     )
 
     // 2. Récupérer les settings

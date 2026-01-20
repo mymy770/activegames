@@ -21,7 +21,9 @@ import {
   RefreshCw,
   Send,
   Loader2,
-  FileText
+  FileText,
+  FileCheck,
+  AlertTriangle
 } from 'lucide-react'
 import { useTranslation } from '@/contexts/LanguageContext'
 import type { OrderWithRelations } from '@/lib/supabase/types'
@@ -32,6 +34,7 @@ interface OrderDetailModalProps {
   onCancel: (orderId: string) => void
   onRecreate?: (orderId: string) => void
   onResendEmail?: (orderId: string) => Promise<{ success: boolean; error?: string }>
+  onResendCgvReminder?: (orderId: string) => Promise<{ success: boolean; error?: string }>
   onGoToAgenda: (date: string, bookingId?: string) => void
   onGoToClient: (contactId: string) => void
   isDark: boolean
@@ -45,6 +48,7 @@ export function OrderDetailModal({
   onCancel,
   onRecreate,
   onResendEmail,
+  onResendCgvReminder,
   onGoToAgenda,
   onGoToClient,
   isDark,
@@ -55,6 +59,9 @@ export function OrderDetailModal({
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [sendingCgv, setSendingCgv] = useState(false)
+  const [cgvSent, setCgvSent] = useState(false)
+  const [cgvError, setCgvError] = useState<string | null>(null)
 
   const handleResendEmail = async () => {
     if (!onResendEmail || !order.customer_email) return
@@ -74,6 +81,27 @@ export function OrderDetailModal({
       setEmailError(t('admin.orders.resend_email_error'))
     } finally {
       setSendingEmail(false)
+    }
+  }
+
+  const handleResendCgvReminder = async () => {
+    if (!onResendCgvReminder || !order.customer_email) return
+
+    setSendingCgv(true)
+    setCgvError(null)
+
+    try {
+      const result = await onResendCgvReminder(order.id)
+      if (result.success) {
+        setCgvSent(true)
+        setTimeout(() => setCgvSent(false), 3000)
+      } else {
+        setCgvError(result.error || t('admin.orders.resend_cgv_error') || 'Erreur lors de l\'envoi')
+      }
+    } catch {
+      setCgvError(t('admin.orders.resend_cgv_error') || 'Erreur lors de l\'envoi')
+    } finally {
+      setSendingCgv(false)
     }
   }
 
@@ -306,6 +334,56 @@ export function OrderDetailModal({
               </div>
             </div>
 
+            {/* CGV Status - seulement pour orders admin */}
+            {order.source === 'admin_agenda' && (
+              <div className={`p-4 rounded-xl ${
+                order.cgv_validated_at
+                  ? isDark ? 'bg-green-900/20 border border-green-700/30' : 'bg-green-50 border border-green-200'
+                  : isDark ? 'bg-amber-900/20 border border-amber-700/30' : 'bg-amber-50 border border-amber-200'
+              }`}>
+                <h3 className={`text-sm font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {t('admin.orders.cgv.title') || 'Conditions Générales de Vente'}
+                </h3>
+                <div className="flex items-center gap-3">
+                  {order.cgv_validated_at ? (
+                    <>
+                      <div className={`p-2 rounded-lg ${isDark ? 'bg-green-900/30' : 'bg-green-100'}`}>
+                        <FileCheck className="w-5 h-5 text-green-500" />
+                      </div>
+                      <div>
+                        <p className={`font-medium ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                          {t('admin.orders.cgv.validated') || 'CGV Validées'}
+                        </p>
+                        <p className={`text-xs ${isDark ? 'text-green-400/70' : 'text-green-600'}`}>
+                          {new Date(order.cgv_validated_at).toLocaleDateString(getDateLocale(), {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={`p-2 rounded-lg ${isDark ? 'bg-amber-900/30' : 'bg-amber-100'}`}>
+                        <AlertTriangle className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <div>
+                        <p className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                          {t('admin.orders.cgv.pending') || 'En attente de validation'}
+                        </p>
+                        <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>
+                          {t('admin.orders.cgv.pending_desc') || 'Le client n\'a pas encore validé les CGV'}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Notes */}
             {order.customer_notes && (
               <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
@@ -442,7 +520,7 @@ export function OrderDetailModal({
                 <button
                   onClick={handleResendEmail}
                   disabled={sendingEmail || !order.customer_email}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                  className={`w-full mb-3 flex items-center gap-3 p-3 rounded-xl transition-colors ${
                     !order.customer_email
                       ? isDark
                         ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
@@ -471,7 +549,7 @@ export function OrderDetailModal({
                     <p className="font-medium">
                       {emailSent
                         ? t('admin.orders.resend_email_success')
-                        : t('admin.orders.resend_email')
+                        : t('admin.orders.resend_confirmation_email') || 'Renvoyer email de confirmation'
                       }
                     </p>
                     <p className={`text-xs ${
@@ -485,7 +563,62 @@ export function OrderDetailModal({
                         ? t('admin.orders.no_email_address')
                         : emailError
                           ? emailError
-                          : t('admin.orders.resend_email_desc')
+                          : t('admin.orders.resend_confirmation_desc') || 'Inclut le lien de validation CGV'
+                      }
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Bouton Renvoyer Rappel CGV - seulement pour orders admin avec CGV non validées */}
+              {onResendCgvReminder && order.status !== 'cancelled' && order.source === 'admin_agenda' && !order.cgv_validated_at && (
+                <button
+                  onClick={handleResendCgvReminder}
+                  disabled={sendingCgv || !order.customer_email}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                    !order.customer_email
+                      ? isDark
+                        ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : cgvSent
+                        ? isDark
+                          ? 'bg-green-600/20 text-green-400'
+                          : 'bg-green-50 text-green-600'
+                        : cgvError
+                          ? isDark
+                            ? 'bg-red-600/20 text-red-400'
+                            : 'bg-red-50 text-red-600'
+                          : isDark
+                            ? 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400'
+                            : 'bg-amber-50 hover:bg-amber-100 text-amber-600'
+                  }`}
+                >
+                  {sendingCgv ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : cgvSent ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <FileCheck className="w-5 h-5" />
+                  )}
+                  <div className="text-left flex-1">
+                    <p className="font-medium">
+                      {cgvSent
+                        ? t('admin.orders.resend_cgv_success') || 'Rappel CGV envoyé'
+                        : t('admin.orders.resend_cgv_reminder') || 'Envoyer rappel CGV'
+                      }
+                    </p>
+                    <p className={`text-xs ${
+                      !order.customer_email
+                        ? isDark ? 'text-gray-600' : 'text-gray-400'
+                        : cgvError
+                          ? isDark ? 'text-red-400/70' : 'text-red-500/70'
+                          : isDark ? 'text-amber-400/70' : 'text-amber-500/70'
+                    }`}>
+                      {!order.customer_email
+                        ? t('admin.orders.no_email_address')
+                        : cgvError
+                          ? cgvError
+                          : t('admin.orders.resend_cgv_desc') || 'Relancer le client pour valider les CGV'
                       }
                     </p>
                   </div>

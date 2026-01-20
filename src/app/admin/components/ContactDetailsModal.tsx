@@ -257,6 +257,21 @@ export function ContactDetailsModal({
                   </div>
                 )}
               </div>
+              {/* Langue préférée pour les emails */}
+              <div>
+                <label className={`text-sm ${
+                  isDark ? 'text-gray-400' : 'text-gray-600'
+                }`}>{t('admin.clients.email_language') || 'Email Language'}</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xl">
+                    {contact.preferred_locale === 'he' ? '🇮🇱' : contact.preferred_locale === 'fr' ? '🇫🇷' : '🇬🇧'}
+                  </span>
+                  <span className={isDark ? 'text-white' : 'text-gray-900'}>
+                    {contact.preferred_locale === 'he' ? 'עברית (Hebrew)' :
+                     contact.preferred_locale === 'fr' ? 'Français (French)' : 'English'}
+                  </span>
+                </div>
+              </div>
               {contact.notes_client && (
                 <div>
                   <label className={`text-sm ${
@@ -383,16 +398,9 @@ export function ContactDetailsModal({
                     <div
                       key={booking.id}
                       onClick={() => {
-                        // Si la commande a un booking actif, aller vers l'agenda
-                        if (booking.booking_id && !isCancelled) {
-                          const bookingDateStr = bookingDate.toISOString().split('T')[0]
-                          router.push(`/admin?date=${bookingDateStr}&booking=${booking.booking_id}`)
-                          onClose()
-                        } else {
-                          // Sinon, aller vers la page commandes avec cette commande sélectionnée
-                          router.push(`/admin/orders?order=${booking.id}`)
-                          onClose()
-                        }
+                        // Toujours aller vers la fiche order dans /admin/orders
+                        router.push(`/admin/orders?order=${booking.id}`)
+                        onClose()
                       }}
                       className={`p-3 rounded-lg border transition-colors cursor-pointer ${
                         isCancelled

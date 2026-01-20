@@ -689,9 +689,17 @@
         "source": "מקור"
       },
       "cgv": {
-        "pending": "ממתין",
-        "validated": "מאושר"
+        "title": "תנאי שירות",
+        "pending": "ממתין לאישור",
+        "pending_desc": "הלקוח עדיין לא אישר את תנאי השירות",
+        "validated": "תנאים אושרו"
       },
+      "resend_confirmation_email": "שלח שוב אימייל אישור",
+      "resend_confirmation_desc": "כולל קישור לאישור תנאי השירות",
+      "resend_cgv_reminder": "שלח תזכורת לתנאים",
+      "resend_cgv_desc": "הזכר ללקוח לאשר את תנאי השירות",
+      "resend_cgv_success": "תזכורת נשלחה בהצלחה",
+      "resend_cgv_error": "שגיאה בשליחת התזכורת",
       "actions": {
         "view": "צפה",
         "confirm": "אשר",
@@ -952,7 +960,8 @@
         "last_name_optional": "שם משפחה (אופציונלי)",
         "phone_required": "טלפון *",
         "phone_placeholder": "05X XXX XXXX",
-        "email_placeholder": "email@example.com"
+        "email_placeholder": "email@example.com",
+        "preferred_language": "שפת מיילים"
       },
       "colors": {
         "blue": "כחול",
@@ -975,7 +984,8 @@
         "modifying": "משנה...",
         "deleting": "מוחק...",
         "processing": "מעבד...",
-        "close": "סגור"
+        "close": "סגור",
+        "view_order": "צפה בהזמנה"
       },
       "modals": {
         "insufficient_capacity": "קיבולת לא מספקת",

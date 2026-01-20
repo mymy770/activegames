@@ -687,9 +687,17 @@
         "source": "Source"
       },
       "cgv": {
-        "pending": "En attente",
-        "validated": "Validees"
+        "title": "Conditions Générales de Vente",
+        "pending": "En attente de validation",
+        "pending_desc": "Le client n'a pas encore validé les CGV",
+        "validated": "CGV Validées"
       },
+      "resend_confirmation_email": "Renvoyer email de confirmation",
+      "resend_confirmation_desc": "Inclut le lien de validation CGV",
+      "resend_cgv_reminder": "Envoyer rappel CGV",
+      "resend_cgv_desc": "Relancer le client pour valider les CGV",
+      "resend_cgv_success": "Rappel CGV envoyé",
+      "resend_cgv_error": "Erreur lors de l'envoi du rappel",
       "actions": {
         "view": "Voir",
         "confirm": "Confirmer",
@@ -942,7 +950,8 @@
         "last_name_optional": "Nom (optionnel)",
         "phone_required": "Telephone *",
         "phone_placeholder": "05X XXX XXXX",
-        "email_placeholder": "email@exemple.com"
+        "email_placeholder": "email@exemple.com",
+        "preferred_language": "Langue emails"
       },
       "colors": {
         "blue": "Bleu",
@@ -965,6 +974,7 @@
         "modifying": "Modification...",
         "deleting": "Suppression...",
         "processing": "En cours...",
+        "view_order": "Voir commande",
         "close": "Fermer"
       },
       "modals": {

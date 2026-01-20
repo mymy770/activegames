@@ -177,11 +177,25 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Récupérer la langue préférée du contact si disponible
+      let contactLocale: 'he' | 'fr' | 'en' = 'he'
+      if (booking.primary_contact_id) {
+        const { data: contactData } = await supabase
+          .from('contacts')
+          .select('preferred_locale')
+          .eq('id', booking.primary_contact_id)
+          .single<{ preferred_locale: string | null }>()
+        if (contactData?.preferred_locale) {
+          contactLocale = contactData.preferred_locale as 'he' | 'fr' | 'en'
+        }
+      }
+
       // Envoyer l'email de confirmation
       const result = await sendBookingConfirmationEmail({
         booking,
         branch,
-        triggeredBy: user.id
+        triggeredBy: user.id,
+        locale: contactLocale
       })
 
       if (result.success) {

@@ -425,56 +425,54 @@ export async function sendBookingConfirmationEmail(params: {
   let cgvSectionHtml = ''
 
   if (cgvToken) {
-    // CGV section should appear right after booking reference
+    // CGV section - fine line with button, placed after booking reference
+    // Simple and compact design - does NOT say "to complete booking" as the booking is already confirmed
     if (locale === 'he') {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 20px 40px 0 40px;">
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 20px; border: 2px solid #f59e0b;">
-              <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 16px; text-align: right;">⚠️ פעולה נדרשת: אישור תנאי שירות</h3>
-              <p style="color: #78350f; margin: 0 0 15px 0; font-size: 14px; line-height: 1.6; text-align: right;">
-                כדי להשלים את ההזמנה שלך, אנא אשר את תנאי השירות שלנו על ידי לחיצה על הכפתור למטה:
-              </p>
-              <div style="text-align: center;">
-                <a href="${cgvUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  אישור תנאי שירות
-                </a>
-              </div>
+          <td style="padding: 12px 40px 0 40px;">
+            <div style="background-color: #fffbeb; border-radius: 8px; padding: 12px 16px; border: 1px solid #f59e0b; display: flex; align-items: center; justify-content: space-between;">
+              <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ פעולה נדרשת: אישור תנאי שירות</span>
+              <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px; margin-right: 12px;">
+                אישור תנאים
+              </a>
             </div>
           </td>
         </tr>`
     } else if (locale === 'fr') {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 20px 40px 0 40px;">
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 20px; border: 2px solid #f59e0b;">
-              <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 16px;">⚠️ Action requise : Validation des CGV</h3>
-              <p style="color: #78350f; margin: 0 0 15px 0; font-size: 14px; line-height: 1.6;">
-                Pour finaliser votre réservation, merci de confirmer les conditions générales de vente en cliquant sur le bouton ci-dessous :
-              </p>
-              <div style="text-align: center;">
-                <a href="${cgvUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  Valider les CGV
-                </a>
-              </div>
-            </div>
+          <td style="padding: 12px 40px 0 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 8px; border: 1px solid #f59e0b;">
+              <tr>
+                <td style="padding: 12px 16px;">
+                  <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ Action requise : Validation des CGV</span>
+                </td>
+                <td style="padding: 12px 16px; text-align: right;">
+                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">
+                    Valider les CGV
+                  </a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>`
     } else {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 20px 40px 0 40px;">
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 20px; border: 2px solid #f59e0b;">
-              <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 16px;">⚠️ Action Required: Terms & Conditions</h3>
-              <p style="color: #78350f; margin: 0 0 15px 0; font-size: 14px; line-height: 1.6;">
-                To complete your booking, please confirm our terms and conditions by clicking the button below:
-              </p>
-              <div style="text-align: center;">
-                <a href="${cgvUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  Accept Terms & Conditions
-                </a>
-              </div>
-            </div>
+          <td style="padding: 12px 40px 0 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 8px; border: 1px solid #f59e0b;">
+              <tr>
+                <td style="padding: 12px 16px;">
+                  <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ Action required: Accept Terms & Conditions</span>
+                </td>
+                <td style="padding: 12px 16px; text-align: right;">
+                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">
+                    Accept T&C
+                  </a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>`
     }

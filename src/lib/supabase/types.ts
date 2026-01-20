@@ -186,6 +186,7 @@ export interface Database {
           company_name: string | null
           vat_id: string | null
           icount_client_id: number | null
+          preferred_locale: 'he' | 'fr' | 'en'
           archived_at: string | null
           archived_reason: string | null
           deleted_at: string | null
@@ -194,10 +195,11 @@ export interface Database {
           created_by: string | null
           updated_by: string | null
         }
-        Insert: Omit<Database['public']['Tables']['contacts']['Row'], 'id' | 'created_at' | 'updated_at' | 'status' | 'source' | 'client_type'> & {
+        Insert: Omit<Database['public']['Tables']['contacts']['Row'], 'id' | 'created_at' | 'updated_at' | 'status' | 'source' | 'client_type' | 'preferred_locale'> & {
           status?: ContactStatus
           source?: ContactSource
           client_type?: ClientType
+          preferred_locale?: 'he' | 'fr' | 'en'
         }
         Update: Partial<Database['public']['Tables']['contacts']['Insert']>
       }

@@ -288,6 +288,24 @@ export default function OrdersPage() {
     }
   }
 
+  // Renvoyer un rappel CGV
+  const handleResendCgvReminder = async (orderId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/resend-cgv`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('Error resending CGV reminder:', error)
+      return { success: false, error: 'Network error' }
+    }
+  }
+
   // Réactiver une réservation annulée - redirige vers l'agenda pour vérifier les disponibilités
   const handleReactivate = (orderId: string) => {
     const order = orders.find(o => o.id === orderId)
@@ -530,6 +548,7 @@ export default function OrdersPage() {
           onCancel={handleCancel}
           onRecreate={handleReactivate}
           onResendEmail={handleResendEmail}
+          onResendCgvReminder={handleResendCgvReminder}
           onGoToAgenda={handleGoToAgenda}
           onGoToClient={handleViewClient}
           isDark={isDark}
