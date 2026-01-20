@@ -8,7 +8,8 @@ import {
   Settings,
   FileText,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  Package
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useBranches } from '@/hooks/useBranches'
@@ -16,9 +17,10 @@ import { useTranslation } from '@/contexts/LanguageContext'
 import { AdminHeader } from '../components/AdminHeader'
 import { TemplatesSection } from './components/TemplatesSection'
 import { CredentialsSection } from './components/CredentialsSection'
+import { ICountCatalogSection } from './components/ICountCatalogSection'
 import { createClient } from '@/lib/supabase/client'
 
-type SettingsSection = 'templates' | 'credentials'
+type SettingsSection = 'templates' | 'credentials' | 'catalog'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -96,6 +98,12 @@ export default function SettingsPage() {
       icon: CreditCard,
       label: t('admin.settings.sections.credentials'),
       description: t('admin.settings.sections.credentials_desc')
+    },
+    {
+      id: 'catalog',
+      icon: Package,
+      label: 'Catalogue iCount',
+      description: 'Produits et formules'
     }
   ]
 
@@ -183,6 +191,9 @@ export default function SettingsPage() {
           )}
           {activeSection === 'credentials' && (
             <CredentialsSection isDark={isDark} />
+          )}
+          {activeSection === 'catalog' && (
+            <ICountCatalogSection isDark={isDark} />
           )}
         </div>
       </div>
