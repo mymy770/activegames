@@ -13,12 +13,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier que l'utilisateur est super_admin
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
+    const profile = profileData as { role: string } | null
     if (!profile || profile.role !== 'super_admin') {
       return NextResponse.json({ success: false, error: 'Accès réservé aux super administrateurs' }, { status: 403 })
     }
@@ -105,10 +106,12 @@ export async function POST(request: NextRequest) {
     counts.orders = (ordersCount1 || 0) + ordersCountNull
 
     // Bookings
-    const { data: bookingData1, count: bookingsCount1 } = await supabaseAdmin
+    const { data: bookingData1Raw, count: bookingsCount1 } = await supabaseAdmin
       .from('bookings')
       .select('id', { count: 'exact' })
       .in('branch_id', branchIds)
+
+    const bookingData1 = (bookingData1Raw || []) as { id: string }[]
 
     let bookingDataNull: { id: string }[] = []
     let bookingsCountNull = 0
@@ -117,14 +120,14 @@ export async function POST(request: NextRequest) {
         .from('bookings')
         .select('id', { count: 'exact' })
         .is('branch_id', null)
-      bookingDataNull = data || []
+      bookingDataNull = (data || []) as { id: string }[]
       bookingsCountNull = count || 0
     }
     counts.bookings = (bookingsCount1 || 0) + bookingsCountNull
 
     // Game Sessions et Booking Slots - via booking_id
     const allBookingIds = [
-      ...(bookingData1?.map(b => b.id) || []),
+      ...bookingData1.map(b => b.id),
       ...bookingDataNull.map(b => b.id)
     ]
 

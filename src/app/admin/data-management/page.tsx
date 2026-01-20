@@ -32,7 +32,7 @@ export default function DataManagementPage() {
   const router = useRouter()
   const { t } = useTranslation()
   const { user, loading: authLoading, signOut } = useAuth()
-  const { branches, loading: branchesLoading, selectedBranch, setSelectedBranch } = useBranches()
+  const { branches, loading: branchesLoading, selectedBranch, selectBranch } = useBranches()
 
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [counts, setCounts] = useState<DataCounts | null>(null)
@@ -43,7 +43,7 @@ export default function DataManagementPage() {
   // Deletion state
   const [deletingGroup, setDeletingGroup] = useState<string | null>(null)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
-  const [pendingDeletion, setPendingDeletion] = useState<DeletionGroup[] | null>(null)
+  const [pendingDeletion, setPendingDeletion] = useState<DeletionGroup | null>(null)
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [deletionSuccess, setDeletionSuccess] = useState<string | null>(null)
@@ -105,8 +105,7 @@ export default function DataManagementPage() {
   }
 
   const handleBranchSelect = (branchId: string) => {
-    const branch = branches.find(b => b.id === branchId)
-    if (branch) setSelectedBranch(branch)
+    selectBranch(branchId)
   }
 
   const toggleBranchSelection = (branchId: string) => {

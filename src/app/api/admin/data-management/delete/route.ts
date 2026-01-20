@@ -13,12 +13,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier que l'utilisateur est super_admin
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
+    const profile = profileData as { role: string } | null
     if (!profile || profile.role !== 'super_admin') {
       return NextResponse.json({ success: false, error: 'Accès réservé aux super administrateurs' }, { status: 403 })
     }
@@ -112,10 +113,12 @@ export async function POST(request: NextRequest) {
     // 2. RESERVATIONS (ordre: slots → sessions → bookings → orders)
     if (groupsToDelete.includes('reservations')) {
       // Récupérer tous les bookings
-      const { data: bookings1 } = await supabaseAdmin
+      const { data: bookings1Raw } = await supabaseAdmin
         .from('bookings')
         .select('id')
         .in('branch_id', branchIds)
+
+      const bookings1 = (bookings1Raw || []) as { id: string }[]
 
       let bookingsNull: { id: string }[] = []
       if (includeNullBranch) {
@@ -123,19 +126,21 @@ export async function POST(request: NextRequest) {
           .from('bookings')
           .select('id')
           .is('branch_id', null)
-        bookingsNull = data || []
+        bookingsNull = (data || []) as { id: string }[]
       }
 
       const allBookingIds = [
-        ...(bookings1?.map(b => b.id) || []),
+        ...bookings1.map(b => b.id),
         ...bookingsNull.map(b => b.id)
       ]
 
       // Récupérer tous les orders
-      const { data: orders1 } = await supabaseAdmin
+      const { data: orders1Raw } = await supabaseAdmin
         .from('orders')
         .select('id')
         .in('branch_id', branchIds)
+
+      const orders1 = (orders1Raw || []) as { id: string }[]
 
       let ordersNull: { id: string }[] = []
       if (includeNullBranch) {
@@ -143,11 +148,11 @@ export async function POST(request: NextRequest) {
           .from('orders')
           .select('id')
           .is('branch_id', null)
-        ordersNull = data || []
+        ordersNull = (data || []) as { id: string }[]
       }
 
       const allOrderIds = [
-        ...(orders1?.map(o => o.id) || []),
+        ...orders1.map(o => o.id),
         ...ordersNull.map(o => o.id)
       ]
 
@@ -269,7 +274,8 @@ export async function POST(request: NextRequest) {
 
     // Logger l'action
     try {
-      await supabaseAdmin.from('activity_logs').insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabaseAdmin as any).from('activity_logs').insert({
         user_id: user.id,
         branch_id: branchIds[0],
         action: 'data_deletion',
