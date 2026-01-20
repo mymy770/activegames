@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { verifyApiPermission } from '@/lib/permissions'
 import { logBookingAction, logContactAction, logOrderAction, getClientIpFromHeaders } from '@/lib/activity-logger'
 import { sendBookingConfirmationEmail } from '@/lib/email-sender'
-import { createOfferForBookingBackground } from '@/lib/icount-documents'
+import { createOfferForBooking, createOfferForBookingBackground } from '@/lib/icount-documents'
 import type {
   UserRole,
   Booking,
@@ -357,6 +357,54 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Récupérer les slots et sessions créés pour la réponse
+    const { data: slots } = await supabase
+      .from('booking_slots')
+      .select('*')
+      .eq('booking_id', newBooking.id)
+
+    const { data: sessions } = await supabase
+      .from('game_sessions')
+      .select('*')
+      .eq('booking_id', newBooking.id)
+
+    // Create iCount offer
+    // For EVENT bookings: synchronous (to include URL in email)
+    // For GAME bookings: background (faster response)
+    console.log('[BOOKINGS API] Creating iCount offer for booking:', newBooking.id, 'type:', body.type)
+    const bookingWithSessions = {
+      ...newBooking,
+      game_sessions: (sessions || []).map(s => ({
+        game_area: s.game_area as 'ACTIVE' | 'LASER',
+        session_order: s.session_order,
+      })),
+    }
+
+    let offerUrl: string | null = null
+    if (body.type === 'EVENT') {
+      // Synchronous for EVENT - we need the URL for the email
+      try {
+        const offerResult = await createOfferForBooking(bookingWithSessions, body.branch_id)
+        console.log('[BOOKINGS API] iCount offer result:', offerResult)
+
+        if (offerResult.success) {
+          // Fetch the updated booking to get the offer URL
+          const { data: updatedBooking } = await supabase
+            .from('bookings')
+            .select('icount_offer_url')
+            .eq('id', newBooking.id)
+            .single()
+          offerUrl = updatedBooking?.icount_offer_url || null
+          console.log('[BOOKINGS API] Offer URL:', offerUrl)
+        }
+      } catch (err) {
+        console.error('[BOOKINGS API] iCount offer exception:', err)
+      }
+    } else {
+      // Background for GAME - no URL needed in email
+      createOfferForBookingBackground(bookingWithSessions, body.branch_id)
+    }
+
     // Envoyer l'email de confirmation
     let emailSent = false
     let emailLogId: string | undefined
@@ -371,8 +419,14 @@ export async function POST(request: NextRequest) {
 
       if (branch) {
         try {
+          // Add offer URL to booking data for email
+          const bookingForEmail = {
+            ...newBooking,
+            icount_offer_url: offerUrl
+          }
+
           const emailResult = await sendBookingConfirmationEmail({
-            booking: newBooking,
+            booking: bookingForEmail,
             branch,
             triggeredBy: user.id,
             locale: body.locale || 'he'
@@ -389,28 +443,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    // Récupérer les slots et sessions créés pour la réponse
-    const { data: slots } = await supabase
-      .from('booking_slots')
-      .select('*')
-      .eq('booking_id', newBooking.id)
-
-    const { data: sessions } = await supabase
-      .from('game_sessions')
-      .select('*')
-      .eq('booking_id', newBooking.id)
-
-    // Create iCount offer in background (non-blocking)
-    console.log('[BOOKINGS API] Creating iCount offer for booking:', newBooking.id)
-    const bookingWithSessions = {
-      ...newBooking,
-      game_sessions: (sessions || []).map(s => ({
-        game_area: s.game_area as 'ACTIVE' | 'LASER',
-        session_order: s.session_order,
-      })),
-    }
-    createOfferForBookingBackground(bookingWithSessions, body.branch_id)
 
     return NextResponse.json({
       success: true,
