@@ -29,12 +29,12 @@ export async function GET(
         cgv_validated_at,
         branch_id,
         contact_id,
-        booking_type
+        order_type
       `)
       .eq('cgv_token', token)
       .single()
 
-    const order = orderData as Pick<OrderRow, 'id' | 'request_reference' | 'customer_first_name' | 'customer_last_name' | 'requested_date' | 'requested_time' | 'participants_count' | 'event_type' | 'cgv_validated_at' | 'branch_id'> & { contact_id: string | null; booking_type: string | null } | null
+    const order = orderData as Pick<OrderRow, 'id' | 'request_reference' | 'customer_first_name' | 'customer_last_name' | 'requested_date' | 'requested_time' | 'participants_count' | 'event_type' | 'cgv_validated_at' | 'branch_id' | 'contact_id' | 'order_type'> | null
 
     if (error || !order) {
       return NextResponse.json(
@@ -81,7 +81,7 @@ export async function GET(
         event_type: order.event_type,
         cgv_validated_at: order.cgv_validated_at,
         branch_name: branchName,
-        booking_type: order.booking_type || 'game',
+        booking_type: order.order_type === 'EVENT' ? 'event' : 'game',
         preferred_locale: preferredLocale
       }
     })

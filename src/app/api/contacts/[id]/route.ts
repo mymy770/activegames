@@ -102,6 +102,7 @@ export async function PUT(
     if (body.phone !== undefined) updateData.phone = body.phone?.trim()
     if (body.email !== undefined) updateData.email = body.email?.trim() || null
     if (body.notes_client !== undefined) updateData.notes_client = body.notes_client?.trim() || null
+    if (body.preferred_locale !== undefined) updateData.preferred_locale = body.preferred_locale
     if (body.alias !== undefined) updateData.alias = body.alias?.trim() || null
     if (body.source !== undefined) updateData.source = body.source
     if (body.client_type !== undefined) updateData.client_type = body.client_type as ClientType
