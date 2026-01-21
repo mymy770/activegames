@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { calculateBookingPrice, type PriceCalculationResult } from '@/lib/price-calculator'
 import type { Database } from '@/lib/supabase/types'
+import type { ICountProduct, ICountEventFormula, ICountRoom } from '@/hooks/usePricingData'
 
 type OrderRow = Database['public']['Tables']['orders']['Row']
 type BranchRow = Database['public']['Tables']['branches']['Row']
@@ -14,7 +16,8 @@ export async function GET(
     const { token } = await params
     const supabase = createServiceRoleClient()
 
-    // Récupérer la commande par token avec le contact pour la langue
+    // Récupérer la commande par token avec le booking et les slots
+    // Note: On utilise !booking_id pour spécifier la foreign key
     const { data: orderData, error } = await supabase
       .from('orders')
       .select(`
@@ -29,12 +32,31 @@ export async function GET(
         cgv_validated_at,
         branch_id,
         contact_id,
-        order_type
+        order_type,
+        booking_id,
+        bookings!booking_id(
+          id,
+          reference_code,
+          type,
+          booking_slots(
+            id,
+            room_id,
+            start_time,
+            end_time,
+            participants,
+            games_count,
+            formula_id,
+            product_id,
+            unit_price,
+            total_price
+          )
+        )
       `)
       .eq('cgv_token', token)
       .single()
 
-    const order = orderData as Pick<OrderRow, 'id' | 'request_reference' | 'customer_first_name' | 'customer_last_name' | 'requested_date' | 'requested_time' | 'participants_count' | 'event_type' | 'cgv_validated_at' | 'branch_id' | 'contact_id' | 'order_type'> | null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const order = orderData as any
 
     if (error || !order) {
       return NextResponse.json(
@@ -68,6 +90,120 @@ export async function GET(
       }
     }
 
+    // Récupérer les données de tarification pour le calcul des prix
+    // (même logique que AccountingModal)
+    const booking = order.bookings
+
+    // Fetch pricing data: icount_products, icount_event_formulas, icount_rooms
+    // (même tables que usePricingData utilisé par AccountingModal)
+    const [productsResult, formulasResult, roomsResult] = await Promise.all([
+      supabase.from('icount_products').select('*').eq('branch_id', order.branch_id).eq('is_active', true),
+      supabase.from('icount_event_formulas').select('*').eq('branch_id', order.branch_id).eq('is_active', true),
+      supabase.from('icount_rooms').select('*').eq('branch_id', order.branch_id).eq('is_active', true)
+    ])
+
+    const products = (productsResult.data || []) as ICountProduct[]
+    const eventFormulas = (formulasResult.data || []) as ICountEventFormula[]
+    const rooms = (roomsResult.data || []) as ICountRoom[]
+
+    console.log('[CGV API] Products count:', products.length)
+    console.log('[CGV API] EventFormulas count:', eventFormulas.length)
+    console.log('[CGV API] Rooms count:', rooms.length)
+    console.log('[CGV API] Order type:', order.order_type)
+    console.log('[CGV API] Participants:', order.participants_count)
+    console.log('[CGV API] Game area:', order.game_area)
+
+    // Calculer le prix avec la même logique que AccountingModal
+    let priceCalculation: PriceCalculationResult | null = null
+    const bookingType = order.order_type as 'GAME' | 'EVENT'
+    const participants = order.participants_count || 0
+    const gameArea = (order.game_area || 'ACTIVE') as 'ACTIVE' | 'LASER' | 'CUSTOM'
+
+    if (participants >= 1 && products.length > 0) {
+      // Determine game parameters from booking slots or order data
+      let laserGames = 0
+      let activeDuration = 0
+
+      const slots = booking?.booking_slots || []
+      if (slots && Array.isArray(slots) && slots.length > 0) {
+        slots.forEach((slot: { area?: string; duration_minutes?: number }) => {
+          if (slot?.area === 'LASER') {
+            laserGames++
+          } else if (slot?.area === 'ACTIVE') {
+            activeDuration += slot?.duration_minutes || 30
+          }
+        })
+      }
+
+      // Fallback to order fields if no slot data
+      if (laserGames === 0 && activeDuration === 0) {
+        if (gameArea === 'LASER' || gameArea === 'CUSTOM') {
+          laserGames = (order as { laser_games_count?: number }).laser_games_count ||
+                       order.number_of_games || 1
+        }
+        if (gameArea === 'ACTIVE' || gameArea === 'CUSTOM') {
+          activeDuration = (order as { active_duration?: number }).active_duration || 60
+        }
+      }
+
+      // Determine event quick plan
+      let eventQuickPlan = 'AA'
+      if (bookingType === 'EVENT') {
+        if (gameArea === 'LASER') eventQuickPlan = 'LL'
+        else if (gameArea === 'ACTIVE') eventQuickPlan = 'AA'
+        else eventQuickPlan = 'AL'
+      }
+
+      priceCalculation = calculateBookingPrice({
+        bookingType,
+        gameArea,
+        participants,
+        numberOfGames: laserGames || order.number_of_games || 1,
+        gameDurations: activeDuration > 0 ? [String(activeDuration)] : ['60'],
+        eventQuickPlan,
+        eventRoomId: booking?.room_id || null,
+        products,
+        eventFormulas,
+        rooms,
+      })
+    }
+
+    // Build price breakdown for display (same format as AccountingModal)
+    const priceBreakdown: Array<{
+      description: string
+      label?: string
+      quantity: number
+      unitPrice: number
+      totalPrice: number
+    }> = []
+
+    if (priceCalculation?.valid) {
+      // Main line - participants × price
+      const typeLabel = bookingType === 'EVENT' ? 'Événement' : 'Jeu'
+      priceBreakdown.push({
+        description: typeLabel,
+        label: priceCalculation.details.unitLabel,
+        quantity: participants,
+        unitPrice: priceCalculation.details.unitPrice,
+        totalPrice: participants * priceCalculation.details.unitPrice
+      })
+
+      // Room line if applicable
+      if (priceCalculation.details.roomPrice && priceCalculation.details.roomPrice > 0) {
+        priceBreakdown.push({
+          description: 'Salle',
+          label: priceCalculation.details.roomName,
+          quantity: 1,
+          unitPrice: priceCalculation.details.roomPrice,
+          totalPrice: priceCalculation.details.roomPrice
+        })
+      }
+    }
+
+    const totalAmount = priceCalculation?.total || 0
+    const subtotal = priceCalculation?.subtotal || 0
+    const discountAmount = priceCalculation?.discountAmount || 0
+
     return NextResponse.json({
       success: true,
       order: {
@@ -82,7 +218,12 @@ export async function GET(
         cgv_validated_at: order.cgv_validated_at,
         branch_name: branchName,
         booking_type: order.order_type === 'EVENT' ? 'event' : 'game',
-        preferred_locale: preferredLocale
+        preferred_locale: preferredLocale,
+        // Price breakdown data (same format as AccountingModal)
+        priceBreakdown,
+        subtotal,
+        discountAmount,
+        totalAmount,
       }
     })
 

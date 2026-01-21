@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { createIsraelDateTime } from '@/lib/dates'
 import { validateIsraeliPhone, formatIsraeliPhone } from '@/lib/validation'
@@ -23,8 +24,13 @@ import { validateBookingPrice } from '@/lib/booking-validation'
 import { logOrderAction, logBookingAction, logContactAction, getClientIpFromHeaders } from '@/lib/activity-logger'
 import { sendBookingConfirmationEmail } from '@/lib/email-sender'
 import { syncContactToICountBackground } from '@/lib/icount-sync'
-import { createOfferForBooking, createOfferForBookingBackground } from '@/lib/icount-documents'
+// iCount offers removed - invoice+receipt created only at order close
 import type { EventRoom, LaserRoom, UserRole, Booking, Branch, Contact } from '@/lib/supabase/types'
+
+// Generate CGV token
+function generateCgvToken(): string {
+  return crypto.randomUUID()
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -695,7 +701,8 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Créer l'order
+      // Créer l'order avec cgv_token pour le lien récapitulatif
+      const eventCgvToken = generateCgvToken()
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -718,9 +725,10 @@ export async function POST(request: NextRequest) {
           number_of_games: eventNumberOfGames,
           terms_accepted: true,
           terms_accepted_at: new Date().toISOString(),
-          cgv_validated_at: new Date().toISOString()
+          cgv_validated_at: new Date().toISOString(),
+          cgv_token: eventCgvToken
         })
-        .select('id, request_reference')
+        .select('id, request_reference, cgv_token')
         .single()
 
       if (orderError) {
@@ -802,38 +810,7 @@ export async function POST(request: NextRequest) {
         icount_invrec_id: null
       }
 
-      // Create iCount offer SYNCHRONOUSLY for EVENT bookings
-      // This ensures we have the offer URL before sending the confirmation email
-      console.log('[ORDER API EVENT] === ICOUNT OFFER SECTION START ===')
-      const bookingWithSessions = {
-        ...eventBookingData,
-        game_sessions: eventGameSessions.map(s => ({
-          game_area: s.game_area,
-          session_order: s.session_order,
-          start_datetime: s.start_datetime,
-          end_datetime: s.end_datetime,
-        })),
-      }
-
-      let offerUrl: string | null = null
-      try {
-        const offerResult = await createOfferForBooking(bookingWithSessions, branch_id)
-        console.log('[ORDER API EVENT] iCount offer result:', offerResult)
-
-        // Fetch the updated booking to get the offer URL
-        if (offerResult.success) {
-          const { data: updatedBooking } = await supabase
-            .from('bookings')
-            .select('icount_offer_url')
-            .eq('id', booking.id)
-            .single()
-          offerUrl = updatedBooking?.icount_offer_url || null
-          console.log('[ORDER API EVENT] Offer URL:', offerUrl)
-        }
-      } catch (err) {
-        console.error('[ORDER API EVENT] iCount offer exception:', err)
-      }
-      console.log('[ORDER API EVENT] === ICOUNT OFFER SECTION END ===')
+      // iCount offer creation removed - invoice+receipt created at order close
 
       // Envoyer l'email de confirmation si le client a un email
       console.log('[ORDER API EVENT] === EMAIL SECTION START ===')
@@ -853,19 +830,14 @@ export async function POST(request: NextRequest) {
         console.log('[ORDER API EVENT] Branch fetch result - name:', branch?.name, 'error:', branchError?.message)
 
         if (branch) {
-          console.log('[ORDER API EVENT] Calling sendBookingConfirmationEmail with locale:', locale)
-          // Prepare booking data with offer URL for email
-          const bookingDataWithOfferUrl = {
-            ...eventBookingData,
-            icount_offer_url: offerUrl
-          }
-
+          console.log('[ORDER API EVENT] Calling sendBookingConfirmationEmail with locale:', locale, 'cgvToken:', order.cgv_token)
           // Envoyer l'email (attendre pour que le status soit mis à jour)
           try {
             const emailResult = await sendBookingConfirmationEmail({
-              booking: bookingDataWithOfferUrl,
+              booking: eventBookingData,
               branch: branch as Branch,
-              locale
+              locale,
+              cgvToken: order.cgv_token
             })
             console.log('[ORDER API EVENT] Email result:', emailResult)
           } catch (err) {
@@ -1255,6 +1227,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 9. Créer l'order
+    // Créer l'order avec cgv_token pour le lien récapitulatif
+    const gameCgvToken = generateCgvToken()
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
@@ -1277,9 +1251,10 @@ export async function POST(request: NextRequest) {
         number_of_games,
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
-        cgv_validated_at: new Date().toISOString()
+        cgv_validated_at: new Date().toISOString(),
+        cgv_token: gameCgvToken
       })
-      .select('id, request_reference')
+      .select('id, request_reference, cgv_token')
       .single()
 
     if (orderError) {
@@ -1381,13 +1356,14 @@ export async function POST(request: NextRequest) {
           icount_invrec_id: null
         }
 
-        console.log('[ORDER API GAME] Calling sendBookingConfirmationEmail with locale:', locale)
+        console.log('[ORDER API GAME] Calling sendBookingConfirmationEmail with locale:', locale, 'cgvToken:', order.cgv_token)
         // Envoyer l'email (attendre pour que le status soit mis à jour)
         try {
           const emailResult = await sendBookingConfirmationEmail({
             booking: bookingForEmail,
             branch: branch as Branch,
-            locale
+            locale,
+            cgvToken: order.cgv_token
           })
           console.log('[ORDER API GAME] Email result:', emailResult)
         } catch (err) {
@@ -1401,44 +1377,7 @@ export async function POST(request: NextRequest) {
     }
     console.log('[ORDER API GAME] === EMAIL SECTION END ===')
 
-    // Create iCount offer in background (non-blocking)
-    console.log('[ORDER API GAME] Creating iCount offer...')
-    const gameBookingForOffer = {
-      id: booking.id,
-      branch_id,
-      type: order_type,
-      status: 'CONFIRMED' as const,
-      start_datetime: startDateTime.toISOString(),
-      end_datetime: endDateTime.toISOString(),
-      game_start_datetime: startDateTime.toISOString(),
-      game_end_datetime: endDateTime.toISOString(),
-      participants_count,
-      event_room_id: null,
-      customer_first_name,
-      customer_last_name: customer_last_name || '',
-      customer_phone: formattedPhone,
-      customer_email: customer_email || null,
-      customer_notes_at_booking: customer_notes || null,
-      reference_code: referenceCode,
-      total_price: null,
-      notes: null,
-      color,
-      primary_contact_id: contactId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      cancelled_at: null,
-      cancelled_reason: null,
-      icount_offer_id: null,
-      icount_offer_url: null,
-      icount_invrec_id: null,
-      game_sessions: sessionResult.game_sessions.map(s => ({
-        game_area: s.game_area as 'ACTIVE' | 'LASER',
-        session_order: s.session_order,
-        start_datetime: s.start_datetime,
-        end_datetime: s.end_datetime,
-      })),
-    }
-    createOfferForBookingBackground(gameBookingForOffer, branch_id)
+    // iCount offer creation removed - invoice+receipt created at order close
 
     return NextResponse.json({
       success: true,

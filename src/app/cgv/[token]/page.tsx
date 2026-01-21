@@ -3,7 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Image from 'next/image'
-import { Loader2, CheckCircle, AlertCircle, FileText, Calendar, Users, X } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, FileText, Calendar, Users, X, Receipt } from 'lucide-react'
+
+interface PriceBreakdownLine {
+  description: string
+  label?: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
 
 interface OrderInfo {
   id: string
@@ -18,6 +26,10 @@ interface OrderInfo {
   branch_name: string
   booking_type: 'game' | 'event'
   preferred_locale: 'he' | 'fr' | 'en'
+  priceBreakdown: PriceBreakdownLine[]
+  subtotal: number
+  discountAmount: number
+  totalAmount: number
 }
 
 export default function CGVValidationPage() {
@@ -109,15 +121,118 @@ export default function CGVValidationPage() {
     }
   }
 
+  // Traductions multi-langues
+  const translations: Record<string, Record<string, string>> = {
+    he: {
+      pageTitle: 'אישור תנאי שימוש',
+      pageSubtitle: 'צפה בפרטי ההזמנה שלך ואשר את התנאים',
+      actionRequired: '⚠️ נדרשת פעולה',
+      orderDetails: 'פרטי ההזמנה שלך',
+      reservationNumber: 'מספר הזמנה',
+      date: 'תאריך',
+      participants: 'משתתפים',
+      eventType: 'סוג אירוע',
+      room: 'חדר',
+      games: 'משחקים',
+      formula: 'נוסחה',
+      unitPrice: 'מחיר ליחידה',
+      subtotal: 'סכום ביניים',
+      total: 'סה"כ לתשלום',
+      termsCheckbox: 'קראתי ואני מאשר/ת את',
+      termsLink: 'תנאי השימוש',
+      validateButton: 'אישור תנאי השימוש',
+      validating: 'מאשר...',
+      alreadyValidated: 'התנאים אושרו',
+      alreadyValidatedMessage: 'תודה! אישרת את תנאי השימוש להזמנה שלך.',
+      invalidLink: 'קישור לא תקין',
+      persons: 'אנשים',
+      priceBreakdown: 'פירוט מחיר',
+      description: 'תיאור',
+      qty: 'כמות',
+      discount: 'הנחה',
+      event: 'אירוע',
+      game: 'משחק',
+    },
+    fr: {
+      pageTitle: 'Validation des CGV',
+      pageSubtitle: 'Consultez les détails de votre commande et acceptez les conditions',
+      actionRequired: '⚠️ Action requise',
+      orderDetails: 'Détails de votre commande',
+      reservationNumber: 'Numéro de réservation',
+      date: 'Date',
+      participants: 'Participants',
+      eventType: "Type d'événement",
+      room: 'Salle',
+      games: 'parties',
+      formula: 'Formule',
+      unitPrice: 'Prix unitaire',
+      subtotal: 'Sous-total',
+      total: 'Total à payer',
+      termsCheckbox: "J'ai lu et j'accepte les",
+      termsLink: 'conditions générales de vente',
+      validateButton: 'Confirmer et accepter les CGV',
+      validating: 'Validation en cours...',
+      alreadyValidated: 'CGV acceptées',
+      alreadyValidatedMessage: 'Merci ! Vous avez accepté les conditions générales de vente pour votre réservation.',
+      invalidLink: 'Lien invalide',
+      persons: 'personnes',
+      priceBreakdown: 'Détail du prix',
+      description: 'Description',
+      qty: 'Qté',
+      discount: 'Remise',
+      event: 'Événement',
+      game: 'Jeu',
+    },
+    en: {
+      pageTitle: 'Terms & Conditions',
+      pageSubtitle: 'Review your order details and accept the terms',
+      actionRequired: '⚠️ Action required',
+      orderDetails: 'Your Order Details',
+      reservationNumber: 'Reservation number',
+      date: 'Date',
+      participants: 'Participants',
+      eventType: 'Event type',
+      room: 'Room',
+      games: 'games',
+      formula: 'Formula',
+      unitPrice: 'Unit price',
+      subtotal: 'Subtotal',
+      total: 'Total to pay',
+      termsCheckbox: 'I have read and accept the',
+      termsLink: 'terms and conditions',
+      validateButton: 'Confirm and accept T&C',
+      validating: 'Validating...',
+      alreadyValidated: 'Terms accepted',
+      alreadyValidatedMessage: 'Thank you! You have accepted the terms and conditions for your reservation.',
+      invalidLink: 'Invalid link',
+      persons: 'persons',
+      priceBreakdown: 'Price Breakdown',
+      description: 'Description',
+      qty: 'Qty',
+      discount: 'Discount',
+      event: 'Event',
+      game: 'Game',
+    },
+  }
+
+  const t = (key: string) => {
+    const locale = order?.preferred_locale || 'he'
+    return translations[locale]?.[key] || translations['en'][key] || key
+  }
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleDateString('fr-FR', {
+    const locale = order?.preferred_locale || 'he'
+    const localeMap = { he: 'he-IL', fr: 'fr-FR', en: 'en-US' }
+    return date.toLocaleDateString(localeMap[locale], {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric'
     })
   }
+
+  const isRTL = order?.preferred_locale === 'he'
 
   if (loading) {
     return (
@@ -147,11 +262,12 @@ export default function CGVValidationPage() {
     return null
   }
 
-  // Déjà validé
+  // Déjà validé - afficher quand même les détails
   if (order.cgv_validated_at || success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
-        <div className="max-w-md w-full text-center">
+      <div className={`min-h-screen bg-gray-900 px-4 py-8 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="max-w-lg mx-auto">
+          {/* Logos */}
           <div className="flex justify-center items-center gap-6 mb-8">
             <Image
               src="/images/logo-activegames.png"
@@ -169,26 +285,129 @@ export default function CGVValidationPage() {
             />
           </div>
 
-          <div className="flex justify-center mb-6">
-            <div className="p-4 bg-green-900/30 rounded-full">
-              <CheckCircle className="w-12 h-12 text-green-400" />
+          {/* Success banner */}
+          <div className="bg-green-900/30 border border-green-700 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <CheckCircle className="w-8 h-8 text-green-400 flex-shrink-0" />
+            <div>
+              <h2 className="text-lg font-semibold text-green-400">{t('alreadyValidated')}</h2>
+              <p className="text-green-300/80 text-sm">{t('alreadyValidatedMessage')}</p>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">CGV acceptées</h1>
-          <p className="text-gray-400 mb-4">
-            Merci ! Vous avez accepté les conditions générales de vente pour votre réservation.
-          </p>
-          <div className="bg-gray-800 rounded-xl p-4 text-left">
-            <p className="text-sm text-gray-400">Réservation</p>
-            <p className="text-lg font-semibold text-white">{order.request_reference}</p>
+
+          {/* Order details card */}
+          <div className="bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
+            <div className="bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-4">
+              <h1 className="text-xl font-bold text-white">{t('orderDetails')}</h1>
+            </div>
+
+            <div className="p-6">
+              {/* Reference */}
+              <div className="bg-gray-700/50 rounded-xl p-4 mb-6">
+                <p className="text-sm text-gray-400 mb-1">{t('reservationNumber')}</p>
+                <p className="text-2xl font-bold text-white">{order.request_reference}</p>
+              </div>
+
+              {/* Date & Participants */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-700 rounded-lg">
+                    <Calendar className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">{t('date')}</p>
+                    <p className="text-white text-sm">{formatDate(order.requested_date)}</p>
+                    <p className="text-cyan-400 font-medium">{order.requested_time}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-700 rounded-lg">
+                    <Users className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">{t('participants')}</p>
+                    <p className="text-white">{order.participants_count} {t('persons')}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Breakdown Table - Same format as AccountingModal */}
+              {order.priceBreakdown && order.priceBreakdown.length > 0 && (
+                <div className="border-t border-gray-700 pt-4">
+                  <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                    <Receipt className="w-4 h-4" />
+                    {t('priceBreakdown')}
+                  </h3>
+
+                  {/* Table */}
+                  <div className="rounded-xl border border-gray-700 overflow-hidden">
+                    {/* Table Header */}
+                    <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium bg-gray-700/50 text-gray-400">
+                      <div className="col-span-5">{t('description')}</div>
+                      <div className="col-span-2 text-center">{t('qty')}</div>
+                      <div className="col-span-2 text-right">{t('unitPrice')}</div>
+                      <div className="col-span-3 text-right">{t('total')}</div>
+                    </div>
+
+                    {/* Table Rows */}
+                    <div className="divide-y divide-gray-700">
+                      {order.priceBreakdown.map((line, index) => (
+                        <div key={index} className="grid grid-cols-12 gap-2 px-4 py-3 text-gray-300">
+                          <div className="col-span-5">
+                            <span className="font-medium text-white">{line.description}</span>
+                            {line.label && (
+                              <span className="block text-xs text-gray-500 mt-0.5">{line.label}</span>
+                            )}
+                          </div>
+                          <div className="col-span-2 text-center">{line.quantity}</div>
+                          <div className="col-span-2 text-right">{line.unitPrice.toLocaleString()} ₪</div>
+                          <div className="col-span-3 text-right font-medium text-white">
+                            {line.totalPrice.toLocaleString()} ₪
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Footer - Totals */}
+                    <div className="px-4 py-3 bg-gray-700/30 space-y-2">
+                      {/* Discount if any */}
+                      {order.discountAmount > 0 && (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">{t('subtotal')}</span>
+                            <span className="text-gray-300">{order.subtotal.toLocaleString()} ₪</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-green-400">
+                            <span>{t('discount')}</span>
+                            <span>-{order.discountAmount.toLocaleString()} ₪</span>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Total */}
+                      <div className={`flex justify-between items-center pt-2 ${
+                        order.discountAmount > 0 ? 'border-t border-gray-600' : ''
+                      }`}>
+                        <span className="text-lg font-bold text-white">{t('total')}</span>
+                        <span className="text-2xl font-bold text-cyan-400">{order.totalAmount.toLocaleString()} ₪</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Footer */}
+          <p className="text-center text-gray-500 text-sm mt-6">
+            {order.branch_name} • Active Games World
+          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 px-4 py-8">
+    <div className={`min-h-screen bg-gray-900 px-4 py-8 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="max-w-lg mx-auto">
         {/* Logos */}
         <div className="flex justify-center items-center gap-6 mb-8">
@@ -208,58 +427,129 @@ export default function CGVValidationPage() {
           />
         </div>
 
+        {/* Action Required Banner */}
+        <div className="bg-amber-900/30 border border-amber-700 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <AlertCircle className="w-8 h-8 text-amber-400 flex-shrink-0" />
+          <div>
+            <h2 className="text-lg font-semibold text-amber-400">{t('actionRequired')}</h2>
+            <p className="text-amber-300/80 text-sm">{t('pageSubtitle')}</p>
+          </div>
+        </div>
+
         {/* Card */}
         <div className="bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-4">
-            <h1 className="text-xl font-bold text-white">Validation des CGV</h1>
-            <p className="text-cyan-100 text-sm mt-1">
-              Merci de confirmer votre acceptation des conditions générales de vente
-            </p>
+            <h1 className="text-xl font-bold text-white">{t('orderDetails')}</h1>
           </div>
 
           {/* Order Info */}
           <div className="p-6">
             {/* Reference - Highlighted */}
             <div className="bg-gray-700/50 rounded-xl p-4 mb-6">
-              <p className="text-sm text-gray-400 mb-1">Numéro de réservation</p>
+              <p className="text-sm text-gray-400 mb-1">{t('reservationNumber')}</p>
               <p className="text-2xl font-bold text-white">{order.request_reference}</p>
             </div>
 
-            {/* Details */}
-            <div className="space-y-4 mb-6">
+            {/* Date & Participants */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-gray-700 rounded-lg">
                   <Calendar className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-400">Date</p>
-                  <p className="text-white">{formatDate(order.requested_date)} à {order.requested_time}</p>
+                  <p className="text-sm text-gray-400">{t('date')}</p>
+                  <p className="text-white text-sm">{formatDate(order.requested_date)}</p>
+                  <p className="text-cyan-400 font-medium">{order.requested_time}</p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-gray-700 rounded-lg">
                   <Users className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-400">Participants</p>
-                  <p className="text-white">{order.participants_count} personnes</p>
+                  <p className="text-sm text-gray-400">{t('participants')}</p>
+                  <p className="text-white">{order.participants_count} {t('persons')}</p>
                 </div>
               </div>
+            </div>
 
-              {order.event_type && (
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-gray-700 rounded-lg">
-                    <FileText className="w-5 h-5 text-cyan-400" />
+            {order.event_type && (
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-gray-700 rounded-lg">
+                  <FileText className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-400">{t('eventType')}</p>
+                  <p className="text-white">{order.event_type}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Price Breakdown Table - DEVIS */}
+            {order.priceBreakdown && order.priceBreakdown.length > 0 && (
+              <div className="border-t border-gray-700 pt-4 mb-6">
+                <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                  <Receipt className="w-4 h-4" />
+                  {t('priceBreakdown')}
+                </h3>
+
+                {/* Table */}
+                <div className="rounded-xl border border-gray-700 overflow-hidden">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium bg-gray-700/50 text-gray-400">
+                    <div className="col-span-5">{t('description')}</div>
+                    <div className="col-span-2 text-center">{t('qty')}</div>
+                    <div className="col-span-2 text-right">{t('unitPrice')}</div>
+                    <div className="col-span-3 text-right">{t('total')}</div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Type d'événement</p>
-                    <p className="text-white">{order.event_type}</p>
+
+                  {/* Table Rows */}
+                  <div className="divide-y divide-gray-700">
+                    {order.priceBreakdown.map((line, index) => (
+                      <div key={index} className="grid grid-cols-12 gap-2 px-4 py-3 text-gray-300">
+                        <div className="col-span-5">
+                          <span className="font-medium text-white">{line.description}</span>
+                          {line.label && (
+                            <span className="block text-xs text-gray-500 mt-0.5">{line.label}</span>
+                          )}
+                        </div>
+                        <div className="col-span-2 text-center">{line.quantity}</div>
+                        <div className="col-span-2 text-right">{line.unitPrice.toLocaleString()} ₪</div>
+                        <div className="col-span-3 text-right font-medium text-white">
+                          {line.totalPrice.toLocaleString()} ₪
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer - Totals */}
+                  <div className="px-4 py-3 bg-gray-700/30 space-y-2">
+                    {/* Discount if any */}
+                    {order.discountAmount > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">{t('subtotal')}</span>
+                          <span className="text-gray-300">{order.subtotal.toLocaleString()} ₪</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-green-400">
+                          <span>{t('discount')}</span>
+                          <span>-{order.discountAmount.toLocaleString()} ₪</span>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Total */}
+                    <div className={`flex justify-between items-center pt-2 ${
+                      order.discountAmount > 0 ? 'border-t border-gray-600' : ''
+                    }`}>
+                      <span className="text-lg font-bold text-white">{t('total')}</span>
+                      <span className="text-2xl font-bold text-cyan-400">{order.totalAmount.toLocaleString()} ₪</span>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* CGV Checkbox */}
             <div className="border-t border-gray-700 pt-6">
@@ -271,13 +561,13 @@ export default function CGVValidationPage() {
                   className="mt-1 w-5 h-5 rounded border-gray-600 bg-gray-700 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-gray-800"
                 />
                 <span className="text-gray-300 text-sm leading-relaxed">
-                  J'ai lu et j'accepte les{' '}
+                  {t('termsCheckbox')}{' '}
                   <button
                     type="button"
                     onClick={() => setShowTermsModal(true)}
                     className="text-cyan-400 hover:text-cyan-300 underline"
                   >
-                    conditions générales de vente
+                    {t('termsLink')}
                   </button>
                 </span>
               </label>
@@ -296,12 +586,12 @@ export default function CGVValidationPage() {
               {submitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Validation en cours...
+                  {t('validating')}
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-5 h-5" />
-                  Confirmer et accepter les CGV
+                  {t('validateButton')}
                 </>
               )}
             </button>

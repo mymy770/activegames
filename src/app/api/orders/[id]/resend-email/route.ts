@@ -91,13 +91,13 @@ export async function POST(
       }
     }
 
-    // Envoyer l'email avec le cgvToken si c'est une commande admin
+    // Envoyer l'email avec le cgvToken (pour les commandes admin ET website)
     const result = await sendBookingConfirmationEmail({
       booking,
       branch,
       triggeredBy: user.id,
       locale: contactLocale,
-      cgvToken: order.source === 'admin_agenda' ? order.cgv_token : undefined,
+      cgvToken: order.cgv_token || undefined,
     })
 
     if (!result.success) {

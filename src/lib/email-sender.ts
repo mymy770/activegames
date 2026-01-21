@@ -376,81 +376,46 @@ export async function sendBookingConfirmationEmail(params: {
     locale
   )
 
-  // Generate offer section HTML (only if URL exists, for EVENT bookings)
-  const offerUrl = booking.icount_offer_url || ''
-  let offerSectionHtml = ''
-
-  if (offerUrl && booking.type === 'EVENT') {
-    // Hebrew offer section
-    if (locale === 'he') {
-      offerSectionHtml = `
-        <tr>
-          <td style="padding: 30px 40px 0 40px;">
-            <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; padding: 25px; border: 1px solid rgba(0, 240, 255, 0.3);">
-              <h3 style="color: #00f0ff; margin: 0 0 15px 0; font-size: 18px; text-align: right;">📄 הצעת מחיר</h3>
-              <p style="color: #ffffff; margin: 0 0 15px 0; font-size: 14px; line-height: 1.6; text-align: right;">
-                לחץ על הכפתור למטה לצפייה בהצעת המחיר שלך:
-              </p>
-              <div style="text-align: center;">
-                <a href="${offerUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #0a0a1a; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  צפייה בהצעת מחיר
-                </a>
-              </div>
-            </div>
-          </td>
-        </tr>`
-    } else {
-      // English/French offer section
-      offerSectionHtml = `
-        <tr>
-          <td style="padding: 30px 40px 0 40px;">
-            <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; padding: 25px; border: 1px solid rgba(0, 240, 255, 0.3);">
-              <h3 style="color: #00f0ff; margin: 0 0 15px 0; font-size: 18px;">📄 ${locale === 'fr' ? 'Devis' : 'Price Quote'}</h3>
-              <p style="color: #ffffff; margin: 0 0 15px 0; font-size: 14px; line-height: 1.6;">
-                ${locale === 'fr' ? 'Cliquez sur le bouton ci-dessous pour voir votre devis:' : 'Click the button below to view your price quote:'}
-              </p>
-              <div style="text-align: center;">
-                <a href="${offerUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #0a0a1a; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  ${locale === 'fr' ? 'Voir le devis' : 'View Quote'}
-                </a>
-              </div>
-            </div>
-          </td>
-        </tr>`
-    }
-  }
+  // iCount offers removed - no more offer section in emails
+  const offerUrl = ''
+  const offerSectionHtml = ''
 
   // Generate CGV validation section HTML (only for admin-created orders with cgvToken)
   const cgvUrl = cgvToken ? `${baseUrl}/cgv/${cgvToken}` : ''
   let cgvSectionHtml = ''
 
   if (cgvToken) {
-    // CGV section - fine line with button, placed after booking reference
-    // Simple and compact design - does NOT say "to complete booking" as the booking is already confirmed
+    // CGV section - prominent card that explains customer will see their order details AND validate T&C
     if (locale === 'he') {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 12px 40px 0 40px;">
-            <div style="background-color: #fffbeb; border-radius: 8px; padding: 12px 16px; border: 1px solid #f59e0b; display: flex; align-items: center; justify-content: space-between;">
-              <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ פעולה נדרשת: אישור תנאי שירות</span>
-              <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px; margin-right: 12px;">
-                אישור תנאים
-              </a>
-            </div>
+          <td style="padding: 20px 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 12px; border: 2px solid #f59e0b;">
+              <tr>
+                <td style="padding: 20px;">
+                  <div style="text-align: center;">
+                    <p style="color: #92400e; font-size: 18px; font-weight: bold; margin: 0 0 8px 0;">⚠️ פעולה נדרשת</p>
+                    <p style="color: #78350f; font-size: 14px; margin: 0 0 16px 0;">צפה בפרטי ההזמנה שלך ואשר את תנאי השירות</p>
+                    <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
+                      צפה בהזמנה ואשר תנאים
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>`
     } else if (locale === 'fr') {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 12px 40px 0 40px;">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 8px; border: 1px solid #f59e0b;">
+          <td style="padding: 20px 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 12px; border: 2px solid #f59e0b;">
               <tr>
-                <td style="padding: 12px 16px;">
-                  <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ Action requise : Validation des CGV</span>
-                </td>
-                <td style="padding: 12px 16px; text-align: right;">
-                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">
-                    Valider les CGV
+                <td style="padding: 20px; text-align: center;">
+                  <p style="color: #92400e; font-size: 18px; font-weight: bold; margin: 0 0 8px 0;">⚠️ Action requise</p>
+                  <p style="color: #78350f; font-size: 14px; margin: 0 0 16px 0;">Consultez le détail de votre commande et acceptez les CGV</p>
+                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
+                    Voir ma commande et valider
                   </a>
                 </td>
               </tr>
@@ -460,15 +425,14 @@ export async function sendBookingConfirmationEmail(params: {
     } else {
       cgvSectionHtml = `
         <tr>
-          <td style="padding: 12px 40px 0 40px;">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 8px; border: 1px solid #f59e0b;">
+          <td style="padding: 20px 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border-radius: 12px; border: 2px solid #f59e0b;">
               <tr>
-                <td style="padding: 12px 16px;">
-                  <span style="color: #92400e; font-size: 14px; font-weight: 500;">⚠️ Action required: Accept Terms & Conditions</span>
-                </td>
-                <td style="padding: 12px 16px; text-align: right;">
-                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">
-                    Accept T&C
+                <td style="padding: 20px; text-align: center;">
+                  <p style="color: #92400e; font-size: 18px; font-weight: bold; margin: 0 0 8px 0;">⚠️ Action Required</p>
+                  <p style="color: #78350f; font-size: 14px; margin: 0 0 16px 0;">View your order details and accept the Terms & Conditions</p>
+                  <a href="${cgvUrl}" target="_blank" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
+                    View Order & Accept T&C
                   </a>
                 </td>
               </tr>
