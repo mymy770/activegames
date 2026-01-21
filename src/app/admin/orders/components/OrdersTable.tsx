@@ -159,7 +159,14 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
     return orders.filter(order => {
       if (typeFilter !== 'all' && order.order_type !== typeFilter) return false
       if (statusFilter !== 'all' && order.status !== statusFilter) return false
-      if (gameAreaFilter !== 'all' && order.game_area !== gameAreaFilter) return false
+      if (gameAreaFilter !== 'all') {
+        // MIX filter should also match CUSTOM
+        if (gameAreaFilter === 'MIX') {
+          if (order.game_area !== 'MIX' && order.game_area !== 'CUSTOM') return false
+        } else if (order.game_area !== gameAreaFilter) {
+          return false
+        }
+      }
       if (sourceFilter !== 'all' && order.source !== sourceFilter) return false
       // Filtre CGV (pour toutes les commandes)
       if (cgvFilter !== 'all') {
@@ -375,19 +382,13 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
           </button>
         </div>
         <div className="col-span-1">
-          {typeFilter === 'GAME' ? (
-            <FilterDropdown
-              label={t('admin.orders.table.zone')}
-              options={gameAreaOptions}
-              value={gameAreaFilter}
-              onChange={setGameAreaFilter}
-              isDark={isDark}
-            />
-          ) : (
-            <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {t('admin.orders.table.zone')}
-            </span>
-          )}
+          <FilterDropdown
+            label={t('admin.orders.table.zone')}
+            options={gameAreaOptions}
+            value={gameAreaFilter}
+            onChange={setGameAreaFilter}
+            isDark={isDark}
+          />
         </div>
         <div className="col-span-1">
           <FilterDropdown
