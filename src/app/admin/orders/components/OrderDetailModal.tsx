@@ -591,8 +591,8 @@ export function OrderDetailModal({
                 </button>
               )}
 
-              {/* Bouton Renvoyer Rappel CGV - seulement pour orders admin avec CGV non validées */}
-              {onResendCgvReminder && order.status !== 'cancelled' && order.source === 'admin_agenda' && !order.cgv_validated_at && (
+              {/* Bouton Renvoyer Rappel CGV - seulement pour orders admin avec CGV non validées et non fermées */}
+              {onResendCgvReminder && order.status !== 'cancelled' && order.status !== 'closed' && order.source === 'admin_agenda' && !order.cgv_validated_at && (
                 <button
                   onClick={handleResendCgvReminder}
                   disabled={sendingCgv || !order.customer_email}
@@ -708,8 +708,8 @@ export function OrderDetailModal({
           </div>
         </div>
 
-        {/* Footer avec bouton d'annulation */}
-        {order.status !== 'cancelled' && (
+        {/* Footer avec bouton d'annulation - masqué si annulé ou fermé */}
+        {order.status !== 'cancelled' && order.status !== 'closed' && (
           <div className={`px-6 py-4 border-t ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
             <button
               onClick={() => {

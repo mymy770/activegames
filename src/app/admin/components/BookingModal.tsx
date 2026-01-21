@@ -3975,10 +3975,10 @@ export function BookingModal({
               <button
                 type="button"
                 onClick={handleDeleteClick}
-                disabled={loading || !canDelete}
-                title={!canDelete ? t('admin.common.no_permission') : undefined}
+                disabled={loading || !canDelete || orderStatus === 'closed'}
+                title={orderStatus === 'closed' ? t('errors.orderClosed') : !canDelete ? t('admin.common.no_permission') : undefined}
                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  !canDelete
+                  !canDelete || orderStatus === 'closed'
                     ? 'opacity-50 cursor-not-allowed text-gray-400'
                     : isDark
                       ? 'text-red-400 hover:bg-red-900/20 hover:text-red-300'
