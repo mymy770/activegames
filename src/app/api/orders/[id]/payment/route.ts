@@ -26,6 +26,8 @@ interface PaymentRequest {
   tokenId?: number // Utiliser un token de carte stockée
   saveCard?: boolean // Sauvegarder la carte pour utilisation future
   useJ5?: boolean // Débiter une pré-autorisation existante
+  usePreauth?: boolean // Utiliser une pré-autorisation existante
+  preauthCode?: string // Code de la pré-autorisation
   // Pour les chèques
   checkNumber?: string
   checkBank?: string
