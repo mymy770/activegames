@@ -14,7 +14,12 @@ interface ClaraContextType {
 
 const ClaraContext = createContext<ClaraContextType | undefined>(undefined)
 
-export function ClaraProvider({ children }: { children: ReactNode }) {
+interface ClaraProviderProps {
+  children: ReactNode
+  theme?: 'light' | 'dark'
+}
+
+export function ClaraProvider({ children, theme = 'dark' }: ClaraProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<'left' | 'right'>('right')
 
@@ -37,6 +42,7 @@ export function ClaraProvider({ children }: { children: ReactNode }) {
         onClose={closeClara}
         position={position}
         onPositionChange={setPosition}
+        theme={theme}
       />
     </ClaraContext.Provider>
   )

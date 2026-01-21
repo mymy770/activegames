@@ -19,9 +19,37 @@ function AdminLayoutContent({
   const pathname = usePathname()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isChecking, setIsChecking] = useState(true)
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const hasCheckedRef = useRef(false)
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
   const isLoginPage = pathname === '/admin/login'
+
+  // Écouter les changements de thème depuis localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('admin-theme') as 'light' | 'dark' | null
+    if (savedTheme) setTheme(savedTheme)
+
+    // Écouter les changements de storage (si le thème change dans une autre page)
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'admin-theme' && e.newValue) {
+        setTheme(e.newValue as 'light' | 'dark')
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+
+    // Observer les changements de localStorage dans la même page
+    const interval = setInterval(() => {
+      const currentTheme = localStorage.getItem('admin-theme') as 'light' | 'dark' | null
+      if (currentTheme && currentTheme !== theme) {
+        setTheme(currentTheme)
+      }
+    }, 500)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      clearInterval(interval)
+    }
+  }, [theme])
 
   // Maintenir la session active en arrière-plan
   useSessionPersistence()
@@ -118,7 +146,7 @@ function AdminLayoutContent({
 
   // Authentifié - afficher le contenu avec Clara disponible
   return (
-    <ClaraProvider>
+    <ClaraProvider theme={theme}>
       {children}
     </ClaraProvider>
   )
