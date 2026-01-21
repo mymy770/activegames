@@ -166,6 +166,14 @@ export async function POST(
       }
     }
 
+    // Vérifier si la commande est fermée
+    if (order.status === 'closed') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot add payment to a closed order', messageKey: 'errors.orderClosed' },
+        { status: 400 }
+      )
+    }
+
     let paymentResult: {
       success: boolean
       transactionId?: string

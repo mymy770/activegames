@@ -132,6 +132,20 @@ export async function PUT(
       }
     }
 
+    // Vérifier si l'order associée est fermée (bloquer les modifications)
+    const { data: orderForStatusCheck } = await supabase
+      .from('orders')
+      .select('id, status')
+      .eq('booking_id', id)
+      .single<{ id: string; status: string }>()
+
+    if (orderForStatusCheck?.status === 'closed') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot modify a closed order', messageKey: 'errors.orderClosed' },
+        { status: 400 }
+      )
+    }
+
     // Construire les données de mise à jour
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: Record<string, any> = {}

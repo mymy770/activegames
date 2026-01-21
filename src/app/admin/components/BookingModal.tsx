@@ -2552,6 +2552,16 @@ export function BookingModal({
 
         {/* Body */}
         <form ref={formRef} onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* Avertissement commande fermée */}
+          {orderStatus === 'closed' && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/20 border border-amber-500/30">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                {t('errors.orderClosed')}
+              </p>
+            </div>
+          )}
+
           {/* Reference Code / Numéro de commande */}
           <div>
             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -3996,12 +4006,12 @@ export function BookingModal({
             <button
               type="submit"
               onClick={handleSubmit}
-              disabled={loading || parsedParticipants < 1 || (bookingType === 'EVENT' && !eventParticipantsValidation.valid) || (bookingType === 'EVENT' && (!email.trim() || !!emailError)) || (editingBooking ? !canEdit : !canCreate)}
-              title={(editingBooking ? !canEdit : !canCreate) ? t('admin.common.no_permission') : undefined}
+              disabled={loading || parsedParticipants < 1 || (bookingType === 'EVENT' && !eventParticipantsValidation.valid) || (bookingType === 'EVENT' && (!email.trim() || !!emailError)) || (editingBooking ? !canEdit : !canCreate) || orderStatus === 'closed'}
+              title={orderStatus === 'closed' ? t('errors.orderClosed') : (editingBooking ? !canEdit : !canCreate) ? t('admin.common.no_permission') : undefined}
               className={`px-6 py-2 rounded-lg text-white flex items-center gap-2 disabled:opacity-50 ${
-                (editingBooking ? !canEdit : !canCreate) ? 'cursor-not-allowed' : ''
+                (editingBooking ? !canEdit : !canCreate) || orderStatus === 'closed' ? 'cursor-not-allowed' : ''
               }`}
-              style={{ backgroundColor: (editingBooking ? !canEdit : !canCreate) ? '#6B7280' : color }}
+              style={{ backgroundColor: (editingBooking ? !canEdit : !canCreate) || orderStatus === 'closed' ? '#6B7280' : color }}
             >
               {loading ? (
                 <>

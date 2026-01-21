@@ -1291,6 +1291,7 @@
       "invalidAction": "Action invalide",
       "cannotCancelClosedOrder": "Impossible d'annuler une commande cloturee",
       "cannotCancelOrderWithInvoice": "Impossible d'annuler une commande avec facture. Contactez la comptabilite.",
+      "orderClosed": "Impossible de modifier une commande cloturee",
       "internalError": "Une erreur interne s'est produite",
       "permission": {
         "denied": "Permission refusee",

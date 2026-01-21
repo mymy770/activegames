@@ -1235,6 +1235,7 @@
       "invalidAction": "Invalid action",
       "cannotCancelClosedOrder": "Cannot cancel a closed order",
       "cannotCancelOrderWithInvoice": "Cannot cancel an order with an invoice. Please contact accounting.",
+      "orderClosed": "Cannot modify a closed order",
       "internalError": "An internal error occurred",
       "permission": {
         "denied": "Permission denied",
