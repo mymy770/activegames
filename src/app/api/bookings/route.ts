@@ -49,6 +49,21 @@ function generateCgvToken(): string {
   return token
 }
 
+// Calculer la game_area basée sur les sessions (MIX si mélange ACTIVE+LASER)
+function calculateGameArea(sessions?: Array<{ game_area: string }>): string | null {
+  if (!sessions || sessions.length === 0) return null
+
+  const areas = sessions.map(s => s.game_area)
+  const uniqueAreas = [...new Set(areas)]
+
+  if (uniqueAreas.length === 1) {
+    return uniqueAreas[0]
+  } else if (uniqueAreas.includes('ACTIVE') && uniqueAreas.includes('LASER')) {
+    return 'MIX'
+  }
+  return sessions[0].game_area
+}
+
 interface CreateBookingBody {
   branch_id: string
   type: BookingType
@@ -336,7 +351,7 @@ export async function POST(request: NextRequest) {
           customer_last_name: body.customer_last_name || '',
           customer_phone: body.customer_phone || '0000000000',
           customer_email: body.customer_email || null,
-          game_area: body.game_sessions?.[0]?.game_area || null,
+          game_area: calculateGameArea(body.game_sessions),
           number_of_games: body.game_sessions?.length || 1,
           processed_at: new Date().toISOString(),
         })
@@ -358,7 +373,7 @@ export async function POST(request: NextRequest) {
           source: 'admin_agenda',
           status: 'auto_confirmed',
           order_type: body.type,
-          game_area: body.game_sessions?.[0]?.game_area || null,
+          game_area: calculateGameArea(body.game_sessions),
           number_of_games: body.game_sessions?.length || 1,
           requested_date: bookingDate.toISOString().split('T')[0],
           requested_time: bookingDate.toTimeString().slice(0, 5),

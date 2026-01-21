@@ -516,13 +516,15 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
 
                 {/* Zone */}
                 <div className="col-span-1">
-                  {order.order_type === 'GAME' && order.game_area && (
+                  {order.game_area && (
                     <span className={`text-xs px-2 py-0.5 rounded ${
                       order.game_area === 'LASER'
                         ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                        : order.game_area === 'MIX' || order.game_area === 'CUSTOM'
+                        ? 'bg-gradient-to-r from-blue-100 to-purple-100 text-indigo-700 dark:from-blue-900/30 dark:to-purple-900/30 dark:text-indigo-400'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                     }`}>
-                      {order.game_area}
+                      {order.game_area === 'CUSTOM' ? 'MIX' : order.game_area}
                     </span>
                   )}
                 </div>

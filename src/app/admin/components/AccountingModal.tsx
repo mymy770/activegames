@@ -178,16 +178,16 @@ export function AccountingModal({
 
     if (order.order_type === 'EVENT') {
       // Événements : afficher le type basé sur game_area
-      if (order.game_area === 'ACTIVE') return t('admin.orders.event_active') || 'Événement Active Games'
-      if (order.game_area === 'LASER') return t('admin.orders.event_laser') || 'Événement Laser City'
-      if (order.game_area === 'MIX' || order.game_area === 'CUSTOM') return t('admin.orders.event_mix') || 'Événement Mix'
+      if (order.game_area === 'ACTIVE') return 'Événement Active Games'
+      if (order.game_area === 'LASER') return 'Événement Laser City'
+      if (order.game_area === 'MIX' || order.game_area === 'CUSTOM') return 'Événement Mix'
       // Fallback sur event_type pour les anciennes commandes
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const orderAny = order as any
-      if (orderAny.event_type === 'event_active') return t('admin.orders.event_active') || 'Événement Active Games'
-      if (orderAny.event_type === 'event_laser') return t('admin.orders.event_laser') || 'Événement Laser City'
-      if (orderAny.event_type === 'event_mix') return t('admin.orders.event_mix') || 'Événement Mix'
-      return t('admin.orders.type.event') || 'Événement'
+      if (orderAny.event_type === 'event_active') return 'Événement Active Games'
+      if (orderAny.event_type === 'event_laser') return 'Événement Laser City'
+      if (orderAny.event_type === 'event_mix') return 'Événement Mix'
+      return 'Événement'
     }
 
     // GAME : afficher le type basé sur game_area
