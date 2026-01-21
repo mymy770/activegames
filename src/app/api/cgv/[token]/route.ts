@@ -76,7 +76,8 @@ export async function GET(
     }
 
     // Récupérer le booking si booking_id existe
-    let booking: { id: string; room_id?: string; booking_slots?: Array<{ area?: string; duration_minutes?: number }> } | null = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let booking: any = null
     if (order.booking_id) {
       const { data: bookingData } = await supabase
         .from('bookings')
@@ -98,7 +99,7 @@ export async function GET(
         `)
         .eq('id', order.booking_id)
         .single()
-      booking = bookingData as typeof booking
+      booking = bookingData
     }
 
     // Fetch pricing data: icount_products, icount_event_formulas, icount_rooms
