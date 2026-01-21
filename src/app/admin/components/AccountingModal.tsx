@@ -16,7 +16,8 @@ import {
   Hash,
   Plus,
   Banknote,
-  ShieldCheck
+  ShieldCheck,
+  CheckCheck
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/contexts/LanguageContext'
@@ -28,6 +29,7 @@ import type { OrderWithRelations, Payment } from '@/lib/supabase/types'
 interface AccountingModalProps {
   orderId: string
   onClose: () => void
+  onCloseOrder?: (orderId: string) => void
   isDark: boolean
   branchId: string
 }
@@ -37,6 +39,7 @@ type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'guaranteed'
 export function AccountingModal({
   orderId,
   onClose,
+  onCloseOrder,
   isDark,
   branchId,
 }: AccountingModalProps) {
@@ -787,9 +790,29 @@ export function AccountingModal({
         </div>
 
         {/* Footer */}
-        <div className={`px-6 py-4 border-t flex justify-end ${
+        <div className={`px-6 py-4 border-t flex justify-between ${
           isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
         }`}>
+          {/* Bouton Clôturer - à gauche */}
+          <div>
+            {onCloseOrder && order?.status !== 'closed' && order?.status !== 'cancelled' && (
+              <button
+                onClick={() => {
+                  onClose()
+                  onCloseOrder(orderId)
+                }}
+                className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  isDark
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                }`}
+              >
+                <CheckCheck className="w-4 h-4" />
+                {t('admin.orders.close_order')}
+              </button>
+            )}
+          </div>
+          {/* Bouton Fermer - à droite */}
           <button
             onClick={onClose}
             className={`px-6 py-2 rounded-lg transition-colors ${

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Loader2, Users, Clock, User, Phone, Mail, MessageSquare, Gamepad2, PartyPopper, Palette, Home, Calendar, ChevronLeft, ChevronRight, Trash2, Edit2, RefreshCw, AlertTriangle, ChevronDown, Building2, Zap, Target, FileText, Receipt } from 'lucide-react'
+import { X, Loader2, Users, Clock, User, Phone, Mail, MessageSquare, Gamepad2, PartyPopper, Palette, Home, Calendar, ChevronLeft, ChevronRight, Trash2, Edit2, RefreshCw, AlertTriangle, ChevronDown, Building2, Zap, Target, FileText, Receipt, CheckCheck } from 'lucide-react'
 import type { CreateBookingData, BookingWithSlots } from '@/hooks/useBookings'
 import { ContactFieldAutocomplete } from './ContactFieldAutocomplete'
 import { useContacts } from '@/hooks/useContacts'
@@ -50,7 +50,9 @@ interface BookingModalProps {
   // Navigation vers la commande
   onViewOrder?: (orderId: string) => void // Callback pour voir la commande dans la zone Orders
   orderId?: string | null // ID de la commande liée au booking
+  orderStatus?: string | null // Statut de la commande (pour conditionner les boutons)
   onOpenAccounting?: (orderId: string) => void // Callback pour ouvrir la fiche comptable
+  onCloseOrder?: (orderId: string) => void // Callback pour clôturer la commande
 }
 
 type BookingType = 'GAME' | 'EVENT'
@@ -108,7 +110,9 @@ export function BookingModal({
   canDelete = true,
   onViewOrder,
   orderId,
-  onOpenAccounting
+  orderStatus,
+  onOpenAccounting,
+  onCloseOrder
 }: BookingModalProps) {
   const { t, tArray, locale } = useTranslation()
 
@@ -2490,6 +2494,21 @@ export function BookingModal({
                     title={t('admin.accounting.title')}
                   >
                     <Receipt className="w-6 h-6" />
+                  </button>
+                )}
+                {/* Clôturer la commande */}
+                {onCloseOrder && orderId && orderStatus !== 'closed' && orderStatus !== 'cancelled' && (
+                  <button
+                    type="button"
+                    onClick={() => onCloseOrder(orderId)}
+                    className={`p-2.5 rounded-lg transition-colors ${
+                      isDark
+                        ? 'hover:bg-green-600/30 text-green-400'
+                        : 'hover:bg-green-100 text-green-600'
+                    }`}
+                    title={t('admin.orders.close_order')}
+                  >
+                    <CheckCheck className="w-6 h-6" />
                   </button>
                 )}
               </div>

@@ -240,6 +240,34 @@ export default function OrdersPage() {
     })
   }
 
+  // Clôturer une commande (créer facture iCount + annuler offre)
+  const handleCloseOrder = (orderId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: t('admin.orders.modal.close_title'),
+      message: t('admin.orders.modal.close_message'),
+      type: 'info',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/orders/${orderId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          const result = await response.json()
+          if (result.success) {
+            // Rafraîchir la liste des commandes
+            window.location.reload()
+          } else {
+            alert(result.error || 'Erreur lors de la clôture')
+          }
+        } catch (error) {
+          console.error('Error closing order:', error)
+          alert('Erreur réseau')
+        }
+      }
+    })
+  }
+
   const handleViewOrder = (order: OrderWithRelations) => {
     setSelectedOrder(order)
   }
@@ -538,6 +566,7 @@ export default function OrdersPage() {
             onViewOrder={handleViewOrder}
             onViewClient={handleViewClient}
             onOpenAccounting={(orderId) => setAccountingOrderId(orderId)}
+            onCloseOrder={handleCloseOrder}
             canDelete={canDeleteOrder}
           />
         )}
@@ -567,6 +596,7 @@ export default function OrdersPage() {
           orderId={accountingOrderId}
           branchId={selectedBranchId}
           onClose={() => setAccountingOrderId(null)}
+          onCloseOrder={handleCloseOrder}
           isDark={isDark}
         />
       )}

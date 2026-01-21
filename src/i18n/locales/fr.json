@@ -659,13 +659,15 @@
         "pending": "En attente",
         "auto_confirmed": "Confirmes auto",
         "manually_confirmed": "Confirmes manuel",
-        "cancelled": "Annulees"
+        "cancelled": "Annulees",
+        "closed": "Cloturees"
       },
       "status": {
         "pending": "En attente",
         "auto_confirmed": "Confirme auto",
         "manually_confirmed": "Confirme manuel",
-        "cancelled": "Annule"
+        "cancelled": "Annule",
+        "closed": "Cloture"
       },
       "type": {
         "game": "Jeu",
@@ -703,8 +705,12 @@
         "confirm": "Confirmer",
         "cancel": "Annuler",
         "reactivate": "Reactiver",
-        "delete": "Supprimer"
+        "delete": "Supprimer",
+        "close": "Cloturer"
       },
+      "close_order": "Cloturer la commande",
+      "close_order_confirm": "Voulez-vous vraiment cloturer cette commande ? Cela va creer la facture/recu dans iCount et annuler le devis.",
+      "close_order_success": "Commande cloturee avec succes. La facture/recu a ete creee.",
       "modal": {
         "cancel_title": "Annuler la commande",
         "cancel_message": "Voulez-vous vraiment annuler cette commande ? Cette action est reversible.",

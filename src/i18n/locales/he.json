@@ -661,13 +661,15 @@
         "pending": "ממתינות",
         "auto_confirmed": "אושרו אוטומטית",
         "manually_confirmed": "אושרו ידנית",
-        "cancelled": "בוטלו"
+        "cancelled": "בוטלו",
+        "closed": "נסגרו"
       },
       "status": {
         "pending": "ממתין",
         "auto_confirmed": "אושר אוטומטית",
         "manually_confirmed": "אושר ידנית",
-        "cancelled": "בוטל"
+        "cancelled": "בוטל",
+        "closed": "נסגר"
       },
       "type": {
         "game": "משחק",
@@ -705,8 +707,12 @@
         "confirm": "אשר",
         "cancel": "בטל",
         "reactivate": "הפעל מחדש",
-        "delete": "מחק"
+        "delete": "מחק",
+        "close": "סגור"
       },
+      "close_order": "סגור הזמנה",
+      "close_order_confirm": "האם אתה בטוח שברצונך לסגור הזמנה זו? פעולה זו תיצור חשבונית/קבלה ב-iCount ותבטל את הצעת המחיר.",
+      "close_order_success": "ההזמנה נסגרה בהצלחה. החשבונית/קבלה נוצרה.",
       "modal": {
         "cancel_title": "ביטול הזמנה",
         "cancel_message": "האם אתה בטוח שברצונך לבטל הזמנה זו? פעולה זו ניתנת לביטול.",

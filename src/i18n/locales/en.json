@@ -603,13 +603,15 @@
         "pending": "Pending",
         "auto_confirmed": "Auto confirmed",
         "manually_confirmed": "Manually confirmed",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "closed": "Closed"
       },
       "status": {
         "pending": "Pending",
         "auto_confirmed": "Auto confirmed",
         "manually_confirmed": "Manually confirmed",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "closed": "Closed"
       },
       "type": {
         "game": "Game",
@@ -647,8 +649,12 @@
         "confirm": "Confirm",
         "cancel": "Cancel",
         "reactivate": "Reactivate",
-        "delete": "Delete"
+        "delete": "Delete",
+        "close": "Close"
       },
+      "close_order": "Close order",
+      "close_order_confirm": "Are you sure you want to close this order? This will create the invoice/receipt in iCount and cancel the quote.",
+      "close_order_success": "Order closed successfully. Invoice/receipt has been created.",
       "modal": {
         "cancel_title": "Cancel order",
         "cancel_message": "Are you sure you want to cancel this order? This action is reversible.",

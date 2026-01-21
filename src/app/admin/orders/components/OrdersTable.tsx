@@ -16,7 +16,9 @@ import {
   XCircle,
   FileCheck,
   AlertTriangle,
-  Receipt
+  Receipt,
+  CheckCheck,
+  Lock
 } from 'lucide-react'
 import { useTranslation } from '@/contexts/LanguageContext'
 import type { OrderWithRelations, OrderStatus, GameArea } from '@/lib/supabase/types'
@@ -31,6 +33,7 @@ interface OrdersTableProps {
   onViewOrder: (order: OrderWithRelations) => void
   onViewClient: (contactId: string) => void
   onOpenAccounting?: (orderId: string) => void
+  onCloseOrder?: (orderId: string) => void
   canDelete?: boolean // Permission d'annuler une commande
 }
 
@@ -119,7 +122,7 @@ function FilterDropdown({
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200, 500, 1000]
 
-export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClient, onOpenAccounting, canDelete = true }: OrdersTableProps) {
+export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClient, onOpenAccounting, onCloseOrder, canDelete = true }: OrdersTableProps) {
   const { t, locale } = useTranslation()
   const [sortField, setSortField] = useState<SortField>('created')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -240,6 +243,8 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
         return { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', label: t('admin.orders.status.auto_confirmed') }
       case 'manually_confirmed':
         return { icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', label: t('admin.orders.status.manually_confirmed') }
+      case 'closed':
+        return { icon: Lock, color: 'text-gray-600', bg: 'bg-gray-200 dark:bg-gray-600', label: t('admin.orders.status.closed') }
       case 'cancelled':
         return { icon: XCircle, color: 'text-red-600', bg: 'bg-gray-100 dark:bg-gray-700', label: t('admin.orders.status.cancelled') }
       default:
@@ -265,6 +270,7 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
     { value: 'pending', label: t('admin.orders.status.pending') },
     { value: 'auto_confirmed', label: t('admin.orders.status.auto_confirmed') },
     { value: 'manually_confirmed', label: t('admin.orders.status.manually_confirmed') },
+    { value: 'closed', label: t('admin.orders.status.closed') },
     { value: 'cancelled', label: t('admin.orders.status.cancelled') },
   ]
 
@@ -566,6 +572,22 @@ export function OrdersTable({ orders, isDark, onCancel, onViewOrder, onViewClien
                       title={t('admin.accounting.title')}
                     >
                       <Receipt className="w-4 h-4" />
+                    </button>
+                  )}
+                  {onCloseOrder && order.status !== 'closed' && order.status !== 'cancelled' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onCloseOrder(order.id)
+                      }}
+                      className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                        isDark
+                          ? 'hover:bg-green-600/30 text-green-400'
+                          : 'hover:bg-green-100 text-green-600'
+                      }`}
+                      title={t('admin.orders.close_order')}
+                    >
+                      <CheckCheck className="w-4 h-4" />
                     </button>
                   )}
                 </div>

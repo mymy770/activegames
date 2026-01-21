@@ -107,6 +107,7 @@ export default function AdminPage() {
   const [modalDefaultGameArea, setModalDefaultGameArea] = useState<'ACTIVE' | 'LASER' | undefined>(undefined)
   const [editingBooking, setEditingBooking] = useState<BookingWithSlots | null>(null)
   const [editingBookingOrderId, setEditingBookingOrderId] = useState<string | null>(null)
+  const [editingBookingOrderStatus, setEditingBookingOrderStatus] = useState<string | null>(null)
   const [accountingOrderId, setAccountingOrderId] = useState<string | null>(null)
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null)
   const [agendaSearchQuery, setAgendaSearchQuery] = useState('')
@@ -686,17 +687,19 @@ export default function AdminPage() {
 
     if (booking) {
       setEditingBooking(booking)
-      // Chercher l'order_id correspondant au booking
+      // Chercher l'order_id et status correspondant au booking
       setEditingBookingOrderId(null) // Reset pendant la recherche
+      setEditingBookingOrderStatus(null)
       const supabase = createClient()
       const { data: orderData } = await supabase
         .from('orders')
-        .select('id')
+        .select('id, status')
         .eq('booking_id', booking.id)
         .single()
-      const order = orderData as { id: string } | null
+      const order = orderData as { id: string; status: string } | null
       if (order) {
         setEditingBookingOrderId(order.id)
+        setEditingBookingOrderStatus(order.status)
       }
       // Extraire l'heure de début de la réservation
       const startTime = new Date(booking.game_start_datetime || booking.start_datetime)
@@ -713,6 +716,7 @@ export default function AdminPage() {
     } else {
       setEditingBooking(null)
       setEditingBookingOrderId(null)
+      setEditingBookingOrderStatus(null)
       setModalInitialHour(hour ?? 10)
       setModalInitialMinute(minute ?? 0)
       setModalDefaultBookingType(defaultType) // Définir le type selon où on clique
@@ -740,6 +744,7 @@ export default function AdminPage() {
     if (success) {
       setEditingBooking(null)
       setEditingBookingOrderId(null)
+      setEditingBookingOrderStatus(null)
       setShowBookingModal(false)
     }
     return success
@@ -767,6 +772,54 @@ export default function AdminPage() {
             isOpen: true,
             title: t('admin.common.error'),
             message: t('admin.agenda.delete_all_error'),
+            type: 'warning',
+            onConfirm: () => {},
+          })
+        }
+      },
+    })
+  }
+
+  // Clôturer une commande (créer facture + annuler devis)
+  const handleCloseOrder = (orderId: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: t('admin.orders.close_order'),
+      message: t('admin.orders.close_order_confirm'),
+      type: 'warning',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/orders/${orderId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+
+          const result = await response.json()
+
+          if (result.success) {
+            setEditingBookingOrderStatus('closed')
+            setConfirmationModal({
+              isOpen: true,
+              title: t('admin.common.success'),
+              message: t('admin.orders.close_order_success'),
+              type: 'success',
+              onConfirm: () => {},
+            })
+          } else {
+            setConfirmationModal({
+              isOpen: true,
+              title: t('admin.common.error'),
+              message: result.error || 'Failed to close order',
+              type: 'warning',
+              onConfirm: () => {},
+            })
+          }
+        } catch (error) {
+          console.error('Error closing order:', error)
+          setConfirmationModal({
+            isOpen: true,
+            title: t('admin.common.error'),
+            message: 'Failed to close order',
             type: 'warning',
             onConfirm: () => {},
           })
@@ -3081,6 +3134,7 @@ export default function AdminPage() {
             setShowBookingModal(false)
             setEditingBooking(null)
             setEditingBookingOrderId(null)
+            setEditingBookingOrderStatus(null)
           }}
           onSubmit={handleSubmitBooking}
           onDelete={handleDeleteBooking}
@@ -3110,7 +3164,9 @@ export default function AdminPage() {
           canDelete={canDeleteAgenda}
           onViewOrder={(orderId) => setOrderDetailId(orderId)}
           orderId={editingBookingOrderId}
+          orderStatus={editingBookingOrderStatus}
           onOpenAccounting={(orderId) => setAccountingOrderId(orderId)}
+          onCloseOrder={handleCloseOrder}
         />
       )}
 
