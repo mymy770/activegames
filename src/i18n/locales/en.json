@@ -722,7 +722,8 @@
     },
     "invoice": {
       "send_invoice": "Send Invoice",
-      "success": "Invoice sent successfully",
+      "success_title": "Invoice Sent",
+      "success": "The invoice has been sent successfully to the customer.",
       "errors": {
         "no_email": "No email address for this order",
         "not_closed": "Order must be closed to send invoice",

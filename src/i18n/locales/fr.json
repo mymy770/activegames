@@ -778,7 +778,8 @@
     },
     "invoice": {
       "send_invoice": "Envoyer facture",
-      "success": "Facture envoyee avec succes",
+      "success_title": "Facture envoyee",
+      "success": "La facture a ete envoyee avec succes au client.",
       "errors": {
         "no_email": "Pas d'adresse email pour cette commande",
         "not_closed": "La commande doit etre cloturee pour envoyer la facture",
