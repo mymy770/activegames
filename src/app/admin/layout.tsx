@@ -26,12 +26,12 @@ function AdminLayoutContent({
 
   // Écouter les changements de thème depuis localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem('admin-theme') as 'light' | 'dark' | null
+    const savedTheme = localStorage.getItem('admin_theme') as 'light' | 'dark' | null
     if (savedTheme) setTheme(savedTheme)
 
     // Écouter les changements de storage (si le thème change dans une autre page)
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'admin-theme' && e.newValue) {
+      if (e.key === 'admin_theme' && e.newValue) {
         setTheme(e.newValue as 'light' | 'dark')
       }
     }
@@ -39,7 +39,7 @@ function AdminLayoutContent({
 
     // Observer les changements de localStorage dans la même page
     const interval = setInterval(() => {
-      const currentTheme = localStorage.getItem('admin-theme') as 'light' | 'dark' | null
+      const currentTheme = localStorage.getItem('admin_theme') as 'light' | 'dark' | null
       if (currentTheme && currentTheme !== theme) {
         setTheme(currentTheme)
       }
