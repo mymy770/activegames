@@ -661,7 +661,10 @@
         "reactivate_title": "Reactivate booking",
         "reactivate_message": "You will be redirected to the agenda to check availability and confirm reactivation.",
         "delete_title": "Delete order",
-        "delete_message": "Are you sure you want to delete this order? This action is irreversible."
+        "delete_message": "Are you sure you want to delete this order? This action is irreversible.",
+        "close_title": "Close order",
+        "close_message": "Are you sure you want to close this order? This will create the invoice/receipt in iCount and cancel the quote.",
+        "close_success": "Order closed successfully. Invoice/receipt has been created."
       },
       "no_orders": "No orders found",
       "loading_error": "Error loading orders",

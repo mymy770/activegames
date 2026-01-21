@@ -242,12 +242,14 @@ export default function OrdersPage() {
 
   // Clôturer une commande (créer facture iCount + annuler offre)
   const handleCloseOrder = (orderId: string) => {
+    console.log('[CLOSE ORDER - Orders Page] Called with orderId:', orderId)
     setConfirmModal({
       isOpen: true,
       title: t('admin.orders.modal.close_title'),
       message: t('admin.orders.modal.close_message'),
       type: 'info',
       onConfirm: async () => {
+        console.log('[CLOSE ORDER - Orders Page] Confirmed, calling API for orderId:', orderId)
         try {
           const response = await fetch(`/api/orders/${orderId}/close`, {
             method: 'POST',

@@ -782,12 +782,14 @@ export default function AdminPage() {
 
   // Clôturer une commande (créer facture + annuler devis)
   const handleCloseOrder = (orderId: string) => {
+    console.log('[CLOSE ORDER] Called with orderId:', orderId)
     setConfirmationModal({
       isOpen: true,
       title: t('admin.orders.close_order'),
       message: t('admin.orders.close_order_confirm'),
       type: 'warning',
       onConfirm: async () => {
+        console.log('[CLOSE ORDER] Confirmed, calling API for orderId:', orderId)
         try {
           const response = await fetch(`/api/orders/${orderId}/close`, {
             method: 'POST',
@@ -3186,6 +3188,7 @@ export default function AdminPage() {
           orderId={accountingOrderId}
           branchId={selectedBranchId}
           onClose={() => setAccountingOrderId(null)}
+          onCloseOrder={handleCloseOrder}
           isDark={isDark}
         />
       )}

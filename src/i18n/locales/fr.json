@@ -717,7 +717,10 @@
         "reactivate_title": "Reactiver la reservation",
         "reactivate_message": "Vous allez etre redirige vers l'agenda pour verifier les disponibilites et confirmer la reactivation.",
         "delete_title": "Supprimer la commande",
-        "delete_message": "Voulez-vous vraiment supprimer cette commande ? Cette action est irreversible."
+        "delete_message": "Voulez-vous vraiment supprimer cette commande ? Cette action est irreversible.",
+        "close_title": "Cloturer la commande",
+        "close_message": "Voulez-vous vraiment cloturer cette commande ? Cela va creer la facture/recu dans iCount et annuler le devis.",
+        "close_success": "Commande cloturee avec succes. La facture/recu a ete creee."
       },
       "no_orders": "Aucune commande trouvee",
       "loading_error": "Erreur lors du chargement des commandes",
