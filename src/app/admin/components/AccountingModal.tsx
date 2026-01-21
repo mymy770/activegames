@@ -175,15 +175,17 @@ export function AccountingModal({
   const getPaymentStatus = (): PaymentStatus => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orderAny = order as any
-    const booking = order?.booking as any
+
+    // Si la commande est clôturée, elle est considérée comme payée
+    if (orderAny?.status === 'closed') return 'paid'
 
     // Check payment_status field first
     if (orderAny?.payment_status === 'fully_paid') return 'paid'
     if (orderAny?.payment_status === 'deposit_paid') return 'partial'
     if (orderAny?.payment_status === 'card_authorized') return 'guaranteed'
 
-    // Fallback to legacy check
-    if (booking?.icount_invrec_id) return 'paid'
+    // Fallback to legacy check - check icount_invrec_id on order itself
+    if (orderAny?.icount_invrec_id) return 'paid'
     return 'unpaid'
   }
 
@@ -678,6 +680,35 @@ export function AccountingModal({
                 </div>
               )}
 
+              {/* Indicateur de commande clôturée */}
+              {(order as unknown as Record<string, unknown>).status === 'closed' && (
+                <div className={`p-4 rounded-xl border-2 ${
+                  isDark ? 'bg-purple-500/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+                      <CheckCheck className={`w-5 h-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                    </div>
+                    <div>
+                      <p className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                        {t('admin.orders.status.closed')}
+                      </p>
+                      <p className={`text-xs ${isDark ? 'text-purple-400/70' : 'text-purple-600/70'}`}>
+                        {(order as unknown as Record<string, unknown>).closed_at
+                          ? new Date((order as unknown as Record<string, unknown>).closed_at as string).toLocaleDateString(getDateLocale(), {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Documents iCount */}
               <div>
                 <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -685,63 +716,50 @@ export function AccountingModal({
                 </h3>
 
                 <div className="space-y-2">
-                  {/* Devis/Offre iCount */}
-                  {booking?.icount_offer_url ? (
-                    <a
-                      href={booking.icount_offer_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                        isDark
-                          ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700 hover:border-gray-500'
-                          : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
-                        <FileText className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                  {/* Facture+Reçu iCount - depuis l'order */}
+                  {(order as unknown as Record<string, unknown>).icount_invrec_id ? (
+                    (order as unknown as Record<string, unknown>).icount_invrec_url ? (
+                      <a
+                        href={(order as unknown as Record<string, unknown>).icount_invrec_url as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                          isDark
+                            ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'
+                            : 'bg-green-50 border-green-200 hover:bg-green-100'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${isDark ? 'bg-green-500/20' : 'bg-green-100'}`}>
+                          <Receipt className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                        </div>
+                        <div className="flex-1">
+                          <p className={`font-medium ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                            {t('admin.accounting.invoice')}
+                          </p>
+                          <p className={`text-xs font-mono ${isDark ? 'text-green-500/70' : 'text-green-600/70'}`}>
+                            #{String((order as unknown as Record<string, unknown>).icount_invrec_id)}
+                          </p>
+                        </div>
+                        <ExternalLink className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                      </a>
+                    ) : (
+                      <div className={`flex items-center gap-3 p-3 rounded-xl border ${
+                        isDark ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-200'
+                      }`}>
+                        <div className={`p-2 rounded-lg ${isDark ? 'bg-green-500/20' : 'bg-green-100'}`}>
+                          <Receipt className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                        </div>
+                        <div className="flex-1">
+                          <p className={`font-medium ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                            {t('admin.accounting.invoice')}
+                          </p>
+                          <p className={`text-xs font-mono ${isDark ? 'text-green-500/70' : 'text-green-600/70'}`}>
+                            #{String((order as unknown as Record<string, unknown>).icount_invrec_id)}
+                          </p>
+                        </div>
+                        <CheckCircle className={`w-5 h-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {t('admin.orders.view_offer')}
-                        </p>
-                        <p className={`text-xs truncate ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                          iCount
-                        </p>
-                      </div>
-                      <ExternalLink className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
-                    </a>
-                  ) : (
-                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${
-                      isDark ? 'bg-gray-700/30 border-gray-700 text-gray-500' : 'bg-gray-50 border-gray-200 text-gray-400'
-                    }`}>
-                      <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{t('admin.orders.view_offer')}</p>
-                        <p className="text-xs">{t('admin.accounting.not_generated')}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Facture iCount */}
-                  {booking?.icount_invrec_id ? (
-                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${
-                      isDark ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-200'
-                    }`}>
-                      <div className={`p-2 rounded-lg ${isDark ? 'bg-green-500/20' : 'bg-green-100'}`}>
-                        <Receipt className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`font-medium ${isDark ? 'text-green-400' : 'text-green-700'}`}>
-                          {t('admin.accounting.invoice')}
-                        </p>
-                        <p className={`text-xs font-mono ${isDark ? 'text-green-500/70' : 'text-green-600/70'}`}>
-                          #{booking.icount_invrec_id}
-                        </p>
-                      </div>
-                      <CheckCircle className={`w-5 h-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                    </div>
+                    )
                   ) : (
                     <div className={`flex items-center gap-3 p-3 rounded-xl border ${
                       isDark ? 'bg-gray-700/30 border-gray-700 text-gray-500' : 'bg-gray-50 border-gray-200 text-gray-400'

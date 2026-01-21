@@ -209,6 +209,14 @@ export default function OrdersPage() {
           border: 'border-red-500/30',
           label: t('admin.orders.status.cancelled')
         }
+      case 'closed':
+        return {
+          icon: CheckCircle,
+          color: 'text-purple-500',
+          bg: 'bg-purple-500/10',
+          border: 'border-purple-500/30',
+          label: t('admin.orders.status.closed')
+        }
       default:
         return {
           icon: AlertCircle,
@@ -240,14 +248,14 @@ export default function OrdersPage() {
     })
   }
 
-  // Clôturer une commande (créer facture iCount + annuler offre)
+  // Clôturer une commande (créer facture iCount)
   const handleCloseOrder = (orderId: string) => {
     console.log('[CLOSE ORDER - Orders Page] Called with orderId:', orderId)
     setConfirmModal({
       isOpen: true,
       title: t('admin.orders.modal.close_title'),
       message: t('admin.orders.modal.close_message'),
-      type: 'info',
+      type: 'warning',
       onConfirm: async () => {
         console.log('[CLOSE ORDER - Orders Page] Confirmed, calling API for orderId:', orderId)
         try {
@@ -256,15 +264,46 @@ export default function OrdersPage() {
             headers: { 'Content-Type': 'application/json' },
           })
           const result = await response.json()
+          console.log('[CLOSE ORDER - Orders Page] API response:', result)
           if (result.success) {
-            // Rafraîchir la liste des commandes
-            window.location.reload()
+            // Construire le message de succès avec les détails
+            let successMessage = t('admin.orders.close_order_success')
+            if (result.data?.icountInvrecId) {
+              successMessage += `\n\n📄 ${t('admin.accounting.invoice')}: #${result.data.icountInvrecId}`
+            }
+            if (result.data?.totalPaidAmount) {
+              successMessage += `\n💰 ${t('admin.accounting.total')}: ₪${result.data.totalPaidAmount}`
+            }
+
+            // Afficher le message de succès
+            setConfirmModal({
+              isOpen: true,
+              title: t('admin.common.success'),
+              message: successMessage,
+              type: 'success',
+              onConfirm: () => {
+                // Rafraîchir la liste des commandes
+                window.location.reload()
+              }
+            })
           } else {
-            alert(result.error || 'Erreur lors de la clôture')
+            setConfirmModal({
+              isOpen: true,
+              title: t('admin.common.error'),
+              message: result.error || 'Erreur lors de la clôture',
+              type: 'warning',
+              onConfirm: () => {}
+            })
           }
         } catch (error) {
           console.error('Error closing order:', error)
-          alert('Erreur réseau')
+          setConfirmModal({
+            isOpen: true,
+            title: t('admin.common.error'),
+            message: 'Erreur réseau',
+            type: 'warning',
+            onConfirm: () => {}
+          })
         }
       }
     })

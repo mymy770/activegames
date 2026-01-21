@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { verifyApiPermission } from '@/lib/permissions'
 import { logBookingAction, logOrderAction, getClientIpFromHeaders } from '@/lib/activity-logger'
-import { cancelOfferDirectBackground } from '@/lib/icount-documents'
+// iCount offers removed - no more offer cancellation needed
 import type { UserRole, Booking, BookingSlot, GameSession } from '@/lib/supabase/types'
 
 /**
@@ -471,10 +471,7 @@ export async function DELETE(
         )
       }
 
-      // Annuler le devis iCount si existant (en arrière-plan)
-      if (booking.icount_offer_id && booking.branch_id) {
-        cancelOfferDirectBackground(booking.icount_offer_id, booking.branch_id, reason || 'Booking supprimé')
-      }
+      // iCount offer cancellation removed - no more offers to cancel
 
       // Logger la suppression
       await logBookingAction({
@@ -524,10 +521,7 @@ export async function DELETE(
         })
         .eq('booking_id', id)
 
-      // Annuler le devis iCount si existant (en arrière-plan)
-      if (booking.icount_offer_id && booking.branch_id) {
-        cancelOfferDirectBackground(booking.icount_offer_id, booking.branch_id, reason || 'Booking annulé')
-      }
+      // iCount offer cancellation removed - no more offers to cancel
 
       // Logger l'annulation
       await logBookingAction({

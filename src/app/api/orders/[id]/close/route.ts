@@ -1,6 +1,10 @@
 /**
  * API Route pour clôturer une commande
- * POST: Clôturer la commande (annuler l'offre iCount + créer invrec du montant CB prélevé)
+ * POST: Clôturer la commande et créer une facture+reçu du montant CB prélevé
+ *
+ * Workflow simplifié:
+ * - Pas de devis iCount à annuler (plus de création de devis)
+ * - Création d'une facture+reçu simple avec le total des paiements CB
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,11 +22,16 @@ interface Payment {
   created_at: string
   icount_confirmation_code?: string
   cc_last4?: string
+  cc_type?: string
+  check_number?: string
+  check_bank?: string
+  check_date?: string
+  transfer_reference?: string
 }
 
 /**
  * POST /api/orders/[id]/close
- * Clôturer une commande : annuler l'offre iCount et créer une facture+reçu du montant prélevé
+ * Clôturer une commande : créer une facture+reçu du montant prélevé par CB
  */
 export async function POST(
   request: NextRequest,
@@ -35,6 +44,8 @@ export async function POST(
     }
 
     const { id } = await params
+    console.log('[CLOSE ORDER API] Received request for orderId:', id)
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createServiceRoleClient() as any
     const ipAddress = getClientIpFromHeaders(request.headers)
@@ -48,14 +59,14 @@ export async function POST(
         booking:bookings(
           id,
           reference_code,
-          game_type,
-          icount_offer_id
+          type
         )
       `)
       .eq('id', id)
       .single()
 
     if (orderError || !order) {
+      console.log('[CLOSE ORDER API] Order not found. Error:', orderError, 'ID was:', id)
       return NextResponse.json(
         { success: false, error: 'Order not found' },
         { status: 404 }
@@ -87,10 +98,13 @@ export async function POST(
       }
     }
 
-    // Calculer le total des paiements CB prélevés
+    // Calculer les totaux par méthode de paiement
     const payments: Payment[] = order.payments || []
     const cardPayments = payments.filter((p: Payment) => p.payment_method === 'card')
+    const cashPayments = payments.filter((p: Payment) => p.payment_method === 'cash')
     const totalCardAmount = cardPayments.reduce((sum: number, p: Payment) => sum + (p.amount || 0), 0)
+    const totalCashAmount = cashPayments.reduce((sum: number, p: Payment) => sum + (p.amount || 0), 0)
+    const totalPaidAmount = totalCardAmount + totalCashAmount
 
     // Récupérer le provider de paiement pour iCount
     const provider = await getPaymentProvider(order.branch_id)
@@ -98,39 +112,70 @@ export async function POST(
     let icountInvrecId: number | undefined
     let icountInvrecUrl: string | undefined
 
-    // Si on a prélevé de l'argent par CB, créer une facture+reçu
-    if (totalCardAmount > 0 && provider) {
+    // Si on a des paiements, créer une facture+reçu
+    if (totalPaidAmount > 0 && provider) {
       // Déterminer le type de jeu pour la description
-      const gameType = order.booking?.game_type || 'LASER'
-      const gameDescription = gameType === 'ACTIVE'
-        ? 'Jeux Active Games'
-        : 'Jeux Laser City'
+      const bookingType = order.booking?.type || order.order_type || 'GAME'
+      let gameDescription: string
 
-      // Construire la description avec les détails des paiements
-      const paymentDetails = cardPayments.map((p: Payment) => {
-        const date = new Date(p.created_at).toLocaleDateString('he-IL')
-        const confirmCode = p.icount_confirmation_code ? ` (${p.icount_confirmation_code})` : ''
-        const last4 = p.cc_last4 ? ` ****${p.cc_last4}` : ''
-        return `${date}: ₪${p.amount}${last4}${confirmCode}`
-      }).join('\n')
+      if (bookingType === 'EVENT') {
+        gameDescription = 'אירוע פרטי - Active Games & Laser City'
+      } else {
+        // Pour les GAME, on peut avoir LASER, ACTIVE ou les deux
+        gameDescription = 'משחקים - Active Games & Laser City'
+      }
 
-      const hwcContent = `פירוט תשלומים בכרטיס אשראי:\n${paymentDetails}`
-
-      // Créer la facture+reçu dans iCount
-      const invrecResult = await provider.documents.createInvoiceReceipt({
+      // Préparer les paramètres de la facture+reçu
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invrecParams: any = {
         custom_client_id: order.contact_id,
         client_name: `${order.customer_first_name} ${order.customer_last_name || ''}`.trim(),
         email: order.customer_email,
+        phone: order.customer_phone,
         items: [{
           description: gameDescription,
           quantity: 1,
-          unitprice_incvat: totalCardAmount,
+          unitprice_incvat: totalPaidAmount,
         }],
         sanity_string: `close-${id}`.slice(0, 30),
         doc_title: `חשבונית ${order.request_reference}`,
-        hwc: hwcContent,
         doc_lang: 'he',
-      })
+      }
+
+      // Ajouter les paiements CB avec l'objet cc natif iCount
+      // On prend le dernier paiement CB comme référence pour les détails
+      if (totalCardAmount > 0 && cardPayments.length > 0) {
+        const lastCardPayment = cardPayments[cardPayments.length - 1]
+        invrecParams.cc = {
+          sum: totalCardAmount,
+          card_type: lastCardPayment.cc_type || 'VISA',
+          card_number: lastCardPayment.cc_last4 || '0000',
+          confirmation_code: lastCardPayment.icount_confirmation_code || '',
+          num_of_payments: 1,
+        }
+
+        // Si plusieurs paiements CB, ajouter les détails en commentaire
+        if (cardPayments.length > 1) {
+          const paymentDetails = cardPayments.map((p: Payment) => {
+            const date = new Date(p.created_at).toLocaleDateString('he-IL')
+            const confirmCode = p.icount_confirmation_code ? ` (${p.icount_confirmation_code})` : ''
+            const last4 = p.cc_last4 ? ` ****${p.cc_last4}` : ''
+            return `${date}: ₪${p.amount}${last4}${confirmCode}`
+          }).join('\n')
+          invrecParams.hwc = `פירוט תשלומי אשראי:\n${paymentDetails}`
+        }
+      }
+
+      // Ajouter les paiements en espèces avec l'objet cash natif iCount
+      if (totalCashAmount > 0) {
+        invrecParams.cash = {
+          sum: totalCashAmount,
+        }
+      }
+
+      // Créer la facture+reçu dans iCount
+      // Le client sera créé/mis à jour automatiquement par iCount avec custom_client_id
+      const invrecResult = await provider.documents.createInvoiceReceipt(invrecParams)
 
       if (invrecResult.success && invrecResult.data) {
         icountInvrecId = invrecResult.data.docnum
@@ -142,37 +187,55 @@ export async function POST(
       }
     }
 
-    // Annuler l'offre iCount si elle existe
-    const offerId = order.booking?.icount_offer_id
-    if (offerId && provider) {
-      try {
-        const cancelResult = await provider.documents.cancelDocument('offer', offerId, 'Commande clôturée')
-        if (cancelResult.success) {
-          console.log('[CLOSE ORDER] Offer cancelled:', offerId)
-        } else {
-          console.error('[CLOSE ORDER] Failed to cancel offer:', cancelResult.error)
-        }
-      } catch (cancelError) {
-        console.error('[CLOSE ORDER] Exception cancelling offer:', cancelError)
-      }
-    }
-
     // Mettre à jour la commande
+    // Note: Si les colonnes closed_at, closed_by, icount_invrec_id n'existent pas,
+    // on fait juste l'update du status qui est le minimum requis
     const updateData: Record<string, unknown> = {
       status: 'closed',
-      closed_at: new Date().toISOString(),
-      closed_by: user.id,
     }
 
-    if (icountInvrecId) {
-      updateData.icount_invrec_id = icountInvrecId
-      updateData.icount_invrec_url = icountInvrecUrl
+    // Essayer d'ajouter les colonnes optionnelles (peuvent ne pas exister si migration non appliquée)
+    try {
+      updateData.closed_at = new Date().toISOString()
+      updateData.closed_by = user.id
+      if (icountInvrecId) {
+        updateData.icount_invrec_id = icountInvrecId
+        updateData.icount_invrec_url = icountInvrecUrl
+      }
+    } catch {
+      // Colonnes peuvent ne pas exister
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('orders')
       .update(updateData)
       .eq('id', id)
+
+    if (updateError) {
+      console.error('[CLOSE ORDER] Failed to update order status:', updateError)
+      // Si l'erreur est liée aux colonnes manquantes, essayer avec juste le status
+      if (updateError.message?.includes('column')) {
+        const { error: fallbackError } = await supabase
+          .from('orders')
+          .update({ status: 'closed' })
+          .eq('id', id)
+
+        if (fallbackError) {
+          console.error('[CLOSE ORDER] Fallback update also failed:', fallbackError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to update order status' },
+            { status: 500 }
+          )
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Failed to update order status' },
+          { status: 500 }
+        )
+      }
+    }
+
+    console.log('[CLOSE ORDER] Order status updated to closed for:', id)
 
     // Logger l'action
     await logOrderAction({
@@ -186,8 +249,9 @@ export async function POST(
       details: {
         orderClosed: true,
         totalCardAmount,
+        totalCashAmount,
+        totalPaidAmount,
         icountInvrecId,
-        offerCancelled: !!offerId,
       },
       ipAddress,
     })
@@ -198,6 +262,8 @@ export async function POST(
       data: {
         status: 'closed',
         totalCardAmount,
+        totalCashAmount,
+        totalPaidAmount,
         icountInvrecId,
         icountInvrecUrl,
       },

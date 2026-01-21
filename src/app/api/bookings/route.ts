@@ -14,7 +14,7 @@ import { verifyApiPermission } from '@/lib/permissions'
 import { validateBookingPrice } from '@/lib/booking-validation'
 import { logBookingAction, logContactAction, logOrderAction, getClientIpFromHeaders } from '@/lib/activity-logger'
 import { sendBookingConfirmationEmail } from '@/lib/email-sender'
-import { createOfferForBooking, createOfferForBookingBackground } from '@/lib/icount-documents'
+// iCount offers removed - invoice+receipt created only at order close
 import type {
   UserRole,
   Booking,
@@ -413,44 +413,7 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('booking_id', newBooking.id)
 
-    // Create iCount offer
-    // For EVENT bookings: synchronous (to include URL in email)
-    // For GAME bookings: background (faster response)
-    console.log('[BOOKINGS API] Creating iCount offer for booking:', newBooking.id, 'type:', body.type)
-    const bookingWithSessions = {
-      ...newBooking,
-      game_sessions: (sessions || []).map(s => ({
-        game_area: s.game_area as 'ACTIVE' | 'LASER',
-        session_order: s.session_order,
-        start_datetime: s.start_datetime,
-        end_datetime: s.end_datetime,
-      })),
-    }
-
-    let offerUrl: string | null = null
-    if (body.type === 'EVENT') {
-      // Synchronous for EVENT - we need the URL for the email
-      try {
-        const offerResult = await createOfferForBooking(bookingWithSessions, body.branch_id)
-        console.log('[BOOKINGS API] iCount offer result:', offerResult)
-
-        if (offerResult.success) {
-          // Fetch the updated booking to get the offer URL
-          const { data: updatedBooking } = await supabase
-            .from('bookings')
-            .select('icount_offer_url')
-            .eq('id', newBooking.id)
-            .single()
-          offerUrl = updatedBooking?.icount_offer_url || null
-          console.log('[BOOKINGS API] Offer URL:', offerUrl)
-        }
-      } catch (err) {
-        console.error('[BOOKINGS API] iCount offer exception:', err)
-      }
-    } else {
-      // Background for GAME - no URL needed in email
-      createOfferForBookingBackground(bookingWithSessions, body.branch_id)
-    }
+    // iCount offer creation removed - invoice+receipt created at order close
 
     // Envoyer l'email de confirmation
     let emailSent = false
@@ -466,14 +429,8 @@ export async function POST(request: NextRequest) {
 
       if (branch) {
         try {
-          // Add offer URL to booking data for email
-          const bookingForEmail = {
-            ...newBooking,
-            icount_offer_url: offerUrl
-          }
-
           const emailResult = await sendBookingConfirmationEmail({
-            booking: bookingForEmail,
+            booking: newBooking,
             branch,
             triggeredBy: user.id,
             locale: body.locale || 'he',

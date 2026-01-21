@@ -1220,6 +1220,8 @@
       "directConfirmDisabled": "Direct confirmation disabled. Please use the Reactivate button.",
       "orderNotCancelled": "This order is not cancelled",
       "invalidAction": "Invalid action",
+      "cannotCancelClosedOrder": "Cannot cancel a closed order",
+      "cannotCancelOrderWithInvoice": "Cannot cancel an order with an invoice. Please contact accounting.",
       "internalError": "An internal error occurred",
       "permission": {
         "denied": "Permission denied",

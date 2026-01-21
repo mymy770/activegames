@@ -18,12 +18,47 @@ export interface ICountDocumentItem {
   inventory_item_id?: string
 }
 
+// Types de paiement iCount pour les documents (invrec, receipt)
+export interface ICountCreditCardPayment {
+  sum: number                    // Montant payé par CB
+  card_type?: string             // VISA, MASTERCARD, AMEX, etc.
+  card_number?: string           // 4 derniers chiffres (ex: "0000")
+  confirmation_code?: string     // Code de confirmation de la transaction
+  exp_year?: number              // Année d'expiration
+  exp_month?: number             // Mois d'expiration
+  holder_id?: string             // ID du titulaire (Teudat Zehut)
+  holder_name?: string           // Nom du titulaire
+  date?: string                  // Date de transaction (YYYY-MM-DD)
+  num_of_payments?: number       // Nombre de paiements (1 si paiement unique)
+  first_payment?: number         // Premier paiement si échelonné
+}
+
+export interface ICountCashPayment {
+  sum: number                    // Montant en espèces
+}
+
+export interface ICountChequePayment {
+  sum: number                    // Montant du chèque
+  date: string                   // Date du chèque (YYYY-MM-DD)
+  bank: number                   // Code banque
+  branch: number                 // Code agence
+  account: number                // Numéro de compte
+  number: number                 // Numéro du chèque
+}
+
+export interface ICountBankTransferPayment {
+  sum: number                    // Montant du virement
+  date: string                   // Date du virement (YYYY-MM-DD)
+  account?: number               // ID compte bancaire de destination dans iCount
+}
+
 export interface CreateDocumentParams {
   doctype: ICountDocType
   client_id?: number              // iCount client ID
   custom_client_id?: string       // ActiveLaser UUID (contact.id)
   client_name?: string            // Nom du client (si pas de client_id)
   email?: string                  // Email client
+  phone?: string                  // Téléphone client
   doc_date?: string               // YYYY-MM-DD (défaut: aujourd'hui)
   duedate?: string                // Date d'échéance (pour offer/order)
   currency_code?: string          // "ILS" par défaut
@@ -33,6 +68,11 @@ export interface CreateDocumentParams {
   sanity_string?: string          // Pour éviter les doublons (max 30 chars)
   send_email?: boolean            // Envoyer par email
   doc_lang?: string               // Langue du document (he/en/fr)
+  // Paiements (pour invrec/receipt uniquement)
+  cc?: ICountCreditCardPayment    // Paiement par carte de crédit
+  cash?: ICountCashPayment        // Paiement en espèces
+  cheques?: ICountChequePayment[] // Paiements par chèque(s)
+  banktransfer?: ICountBankTransferPayment // Paiement par virement
 }
 
 export interface DocumentResult {
@@ -138,6 +178,7 @@ export class ICountDocumentsModule {
     // Optional client info
     if (params.client_name) requestParams.client_name = params.client_name
     if (params.email) requestParams.email = params.email
+    if (params.phone) requestParams.phone = params.phone
 
     // Dates
     if (params.doc_date) requestParams.doc_date = params.doc_date
@@ -153,6 +194,46 @@ export class ICountDocumentsModule {
     if (params.send_email) {
       requestParams.send_email = true
       requestParams.email_to_client = true
+    }
+
+    // Paiements (pour invrec/receipt)
+    if (params.cc) {
+      requestParams.cc = {
+        sum: params.cc.sum,
+        ...(params.cc.card_type && { card_type: params.cc.card_type }),
+        ...(params.cc.card_number && { card_number: params.cc.card_number }),
+        ...(params.cc.confirmation_code && { confirmation_code: params.cc.confirmation_code }),
+        ...(params.cc.exp_year && { exp_year: params.cc.exp_year }),
+        ...(params.cc.exp_month && { exp_month: params.cc.exp_month }),
+        ...(params.cc.holder_id && { holder_id: params.cc.holder_id }),
+        ...(params.cc.holder_name && { holder_name: params.cc.holder_name }),
+        ...(params.cc.date && { date: params.cc.date }),
+        ...(params.cc.num_of_payments && { num_of_payments: params.cc.num_of_payments }),
+        ...(params.cc.first_payment && { first_payment: params.cc.first_payment }),
+      }
+    }
+
+    if (params.cash) {
+      requestParams.cash = { sum: params.cash.sum }
+    }
+
+    if (params.cheques && params.cheques.length > 0) {
+      requestParams.cheques = params.cheques.map(cheque => ({
+        sum: cheque.sum,
+        date: cheque.date,
+        bank: cheque.bank,
+        branch: cheque.branch,
+        account: cheque.account,
+        number: cheque.number,
+      }))
+    }
+
+    if (params.banktransfer) {
+      requestParams.banktransfer = {
+        sum: params.banktransfer.sum,
+        date: params.banktransfer.date,
+        ...(params.banktransfer.account && { account: params.banktransfer.account }),
+      }
     }
 
     console.log('[ICOUNT DOCS] Creating document:', params.doctype, 'sanity:', params.sanity_string)

@@ -185,9 +185,50 @@ export async function GET(
       totalPrice: number
     }> = []
 
+    // Translations for price breakdown labels based on contact's preferred locale
+    const priceLabels: Record<string, Record<string, string>> = {
+      he: {
+        laser: 'לייזר',
+        active: 'אקטיב',
+        laser_active: 'לייזר + אקטיב',
+        game: 'משחק',
+        event: 'אירוע',
+        room: 'חדר'
+      },
+      en: {
+        laser: 'Laser',
+        active: 'Active',
+        laser_active: 'Laser + Active',
+        game: 'Game',
+        event: 'Event',
+        room: 'Room'
+      },
+      fr: {
+        laser: 'Laser',
+        active: 'Active',
+        laser_active: 'Laser + Active',
+        game: 'Jeu',
+        event: 'Événement',
+        room: 'Salle'
+      }
+    }
+
+    const getLabel = (key: string) => {
+      return priceLabels[preferredLocale]?.[key] || priceLabels['en'][key] || key
+    }
+
+    // Determine the game type label based on gameArea
+    const getGameTypeLabel = (): string => {
+      if (gameArea === 'LASER') return getLabel('laser')
+      if (gameArea === 'ACTIVE') return getLabel('active')
+      if (gameArea === 'CUSTOM') return getLabel('laser_active')
+      // Fallback based on booking type
+      return bookingType === 'EVENT' ? getLabel('event') : getLabel('game')
+    }
+
     if (priceCalculation?.valid) {
-      // Main line - participants × price
-      const typeLabel = bookingType === 'EVENT' ? 'Événement' : 'Jeu'
+      // Main line - participants × price with actual game type
+      const typeLabel = getGameTypeLabel()
       priceBreakdown.push({
         description: typeLabel,
         label: priceCalculation.details.unitLabel,
@@ -199,7 +240,7 @@ export async function GET(
       // Room line if applicable
       if (priceCalculation.details.roomPrice && priceCalculation.details.roomPrice > 0) {
         priceBreakdown.push({
-          description: 'Salle',
+          description: getLabel('room'),
           label: priceCalculation.details.roomName,
           quantity: 1,
           unitPrice: priceCalculation.details.roomPrice,

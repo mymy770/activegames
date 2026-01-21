@@ -10,7 +10,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { verifyApiPermission } from '@/lib/permissions'
 import { logOrderAction, logBookingAction, getClientIpFromHeaders } from '@/lib/activity-logger'
 import { sendBookingConfirmationEmail } from '@/lib/email-sender'
-import { cancelOfferDirectBackground } from '@/lib/icount-documents'
+// iCount offers removed - no more offer cancellation needed
 import type { UserRole, Booking, Branch } from '@/lib/supabase/types'
 
 /**
@@ -141,6 +141,32 @@ export async function PATCH(
       )
 
     } else if (action === 'cancel') {
+      // Vérifier si la commande est déjà clôturée
+      if (order.status === 'closed') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Cannot cancel a closed order',
+            message: 'This order has been closed and cannot be cancelled.',
+            messageKey: 'errors.cannotCancelClosedOrder'
+          },
+          { status: 400 }
+        )
+      }
+
+      // Vérifier si une facture existe (ne pas annuler si facture créée)
+      if (order.icount_invrec_id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Cannot cancel order with invoice',
+            message: 'This order has an invoice and cannot be cancelled. Please contact accounting.',
+            messageKey: 'errors.cannotCancelOrderWithInvoice'
+          },
+          { status: 400 }
+        )
+      }
+
       // Annuler la commande
       const { error: updateError } = await supabase
         .from('orders')
@@ -160,10 +186,7 @@ export async function PATCH(
           .eq('id', order.booking_id)
           .single()
 
-        // Annuler le devis iCount si présent (en background)
-        if (bookingToCancel?.icount_offer_id && bookingToCancel?.branch_id) {
-          cancelOfferDirectBackground(bookingToCancel.icount_offer_id, bookingToCancel.branch_id, 'Order cancelled')
-        }
+        // iCount offer cancellation removed - no more offers to cancel
 
         await supabase
           .from('bookings')
@@ -614,15 +637,7 @@ export async function DELETE(
     // Annuler le devis iCount si un booking est associé (en background)
     if (order.booking_id) {
       // Récupérer les infos du booking avant suppression
-      const { data: booking } = await supabase
-        .from('bookings')
-        .select('icount_offer_id, branch_id')
-        .eq('id', order.booking_id)
-        .single()
-
-      if (booking?.icount_offer_id) {
-        cancelOfferDirectBackground(booking.icount_offer_id, booking.branch_id, 'Order deleted')
-      }
+      // iCount offer cancellation removed - no more offers to cancel
     }
 
     const { error } = await supabase

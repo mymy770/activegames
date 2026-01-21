@@ -1243,6 +1243,8 @@
       "directConfirmDisabled": "אישור ישיר מושבת. השתמש בכפתור הפעל מחדש.",
       "orderNotCancelled": "הזמנה זו אינה מבוטלת",
       "invalidAction": "פעולה לא תקינה",
+      "cannotCancelClosedOrder": "לא ניתן לבטל הזמנה שנסגרה",
+      "cannotCancelOrderWithInvoice": "לא ניתן לבטל הזמנה עם חשבונית. פנה להנהלת חשבונות.",
       "internalError": "אירעה שגיאה פנימית",
       "permission": {
         "denied": "הרשאה נדחתה",

@@ -1276,6 +1276,8 @@
       "directConfirmDisabled": "Confirmation directe desactivee. Utilisez le bouton Reactiver.",
       "orderNotCancelled": "Cette commande n'est pas annulee",
       "invalidAction": "Action invalide",
+      "cannotCancelClosedOrder": "Impossible d'annuler une commande cloturee",
+      "cannotCancelOrderWithInvoice": "Impossible d'annuler une commande avec facture. Contactez la comptabilite.",
       "internalError": "Une erreur interne s'est produite",
       "permission": {
         "denied": "Permission refusee",

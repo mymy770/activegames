@@ -5,7 +5,7 @@ import { X, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 interface ConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   title: string
   message: string
   type?: 'warning' | 'info' | 'success'
@@ -27,8 +27,8 @@ export function ConfirmationModal({
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
-  const handleConfirm = () => {
-    onConfirm()
+  const handleConfirm = async () => {
+    await onConfirm()
     onClose()
   }
 
