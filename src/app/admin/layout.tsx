@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react'
 import { LanguageProvider, useTranslation } from '@/contexts/LanguageContext'
 import { useSessionPersistence } from '@/hooks/useSessionPersistence'
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout'
+import { ClaraProvider } from '@/components/Clara'
 
 function AdminLayoutContent({
   children,
@@ -115,8 +116,12 @@ function AdminLayoutContent({
     )
   }
 
-  // Authentifié - afficher le contenu
-  return <>{children}</>
+  // Authentifié - afficher le contenu avec Clara disponible
+  return (
+    <ClaraProvider>
+      {children}
+    </ClaraProvider>
+  )
 }
 
 export default function AdminLayout({
