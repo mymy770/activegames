@@ -323,7 +323,20 @@ export async function PUT(
       orderUpdateData.customer_email = updateData.customer_email
     }
     if (body.game_sessions && body.game_sessions.length > 0) {
-      orderUpdateData.game_area = body.game_sessions[0].game_area
+      // Determine game_area based on all sessions
+      const areas = body.game_sessions.map((s: { game_area: string }) => s.game_area)
+      const uniqueAreas = [...new Set(areas)]
+
+      if (uniqueAreas.length === 1) {
+        // All sessions are the same area
+        orderUpdateData.game_area = uniqueAreas[0]
+      } else if (uniqueAreas.includes('ACTIVE') && uniqueAreas.includes('LASER')) {
+        // Mix of ACTIVE and LASER
+        orderUpdateData.game_area = 'MIX'
+      } else {
+        // Fallback to first session's area
+        orderUpdateData.game_area = body.game_sessions[0].game_area
+      }
       orderUpdateData.number_of_games = body.game_sessions.length
     }
 

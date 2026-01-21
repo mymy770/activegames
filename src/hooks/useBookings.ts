@@ -17,6 +17,7 @@ import type {
   Contact,
   GameSession,
   BookingUpdate,
+  GameArea,
 } from '@/lib/supabase/types'
 
 // Type étendu avec les slots, contacts et game_sessions
@@ -54,7 +55,7 @@ export interface CreateBookingData {
     participants_count: number
   }[]
   game_sessions?: {
-    game_area: 'ACTIVE' | 'LASER'
+    game_area: GameArea
     start_datetime: string
     end_datetime: string
     laser_room_id?: string | null

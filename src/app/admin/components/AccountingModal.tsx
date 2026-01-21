@@ -172,6 +172,30 @@ export function AccountingModal({
     }
   }
 
+  // Helper pour afficher le type de jeu avec la zone (comme dans OrderDetailModal)
+  const getGameLabel = (): string => {
+    if (!order) return ''
+
+    if (order.order_type === 'EVENT') {
+      // Événements : afficher le type basé sur game_area
+      if (order.game_area === 'ACTIVE') return t('admin.orders.event_active') || 'Événement Active Games'
+      if (order.game_area === 'LASER') return t('admin.orders.event_laser') || 'Événement Laser City'
+      if (order.game_area === 'MIX' || order.game_area === 'CUSTOM') return t('admin.orders.event_mix') || 'Événement Mix'
+      // Fallback sur event_type pour les anciennes commandes
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orderAny = order as any
+      if (orderAny.event_type === 'event_active') return t('admin.orders.event_active') || 'Événement Active Games'
+      if (orderAny.event_type === 'event_laser') return t('admin.orders.event_laser') || 'Événement Laser City'
+      if (orderAny.event_type === 'event_mix') return t('admin.orders.event_mix') || 'Événement Mix'
+      return t('admin.orders.type.event') || 'Événement'
+    }
+
+    // GAME : afficher le type basé sur game_area
+    if (order.game_area === 'LASER') return 'Laser City'
+    if (order.game_area === 'MIX' || order.game_area === 'CUSTOM') return 'Mix (Active + Laser)'
+    return 'Active Games'
+  }
+
   const getPaymentStatus = (): PaymentStatus => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orderAny = order as any
@@ -451,7 +475,7 @@ export function AccountingModal({
                       }`}>
                         <div className="col-span-6">
                           <span className="font-medium">
-                            {order.order_type === 'EVENT' ? t('admin.orders.type.event') : t('admin.orders.type.game')}
+                            {getGameLabel()}
                           </span>
                           {unitLabel && (
                             <span className={`block text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>

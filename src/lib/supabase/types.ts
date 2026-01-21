@@ -19,7 +19,7 @@ export type UserRole = string
 export type ContactStatus = 'active' | 'archived'
 export type ContactSource = 'admin_agenda' | 'public_booking' | 'website'
 export type ClientType = 'individual' | 'company'
-export type GameArea = 'ACTIVE' | 'LASER'
+export type GameArea = 'ACTIVE' | 'LASER' | 'MIX' | 'CUSTOM'
 
 // Types pour Orders (commandes en ligne)
 export type OrderStatus = 'pending' | 'auto_confirmed' | 'manually_confirmed' | 'cancelled' | 'closed'
