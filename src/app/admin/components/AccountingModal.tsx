@@ -25,6 +25,7 @@ import { useTranslation } from '@/contexts/LanguageContext'
 import { usePricingData } from '@/hooks/usePricingData'
 import { calculateBookingPrice, type PriceCalculationResult } from '@/lib/price-calculator'
 import { PaymentModal, type PaymentData, type PaymentMode } from './PaymentModal'
+import { ConfirmationModal } from './ConfirmationModal'
 import type { OrderWithRelations, Payment } from '@/lib/supabase/types'
 
 interface AccountingModalProps {
@@ -51,6 +52,12 @@ export function AccountingModal({
   const [error, setError] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [sendingInvoice, setSendingInvoice] = useState(false)
+  const [notification, setNotification] = useState<{
+    isOpen: boolean
+    type: 'success' | 'warning' | 'info'
+    title: string
+    message: string
+  }>({ isOpen: false, type: 'info', title: '', message: '' })
 
   const { products, eventFormulas, rooms, loading: loadingPricing } = usePricingData(branchId)
 
@@ -279,14 +286,29 @@ export function AccountingModal({
       const result = await response.json()
 
       if (result.success) {
-        alert(t('admin.invoice.success') || 'Invoice sent successfully')
+        setNotification({
+          isOpen: true,
+          type: 'success',
+          title: t('admin.invoice.success_title') || 'Facture envoyée',
+          message: t('admin.invoice.success') || 'La facture a été envoyée avec succès au client.',
+        })
       } else {
         const errorMsg = result.messageKey ? t(result.messageKey) : result.error
-        alert(errorMsg || 'Failed to send invoice')
+        setNotification({
+          isOpen: true,
+          type: 'warning',
+          title: t('admin.common.error') || 'Erreur',
+          message: errorMsg || 'Échec de l\'envoi de la facture',
+        })
       }
     } catch (err) {
       console.error('Send invoice error:', err)
-      alert(t('errors.networkError') || 'Network error')
+      setNotification({
+        isOpen: true,
+        type: 'warning',
+        title: t('admin.common.error') || 'Erreur',
+        message: t('errors.networkError') || 'Erreur réseau',
+      })
     } finally {
       setSendingInvoice(false)
     }
@@ -950,6 +972,17 @@ export function AccountingModal({
           }
         />
       )}
+
+      {/* Notification Modal */}
+      <ConfirmationModal
+        isOpen={notification.isOpen}
+        onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+        title={notification.title}
+        message={notification.message}
+        type={notification.type}
+        isDark={isDark}
+      />
     </div>
   )
 }
