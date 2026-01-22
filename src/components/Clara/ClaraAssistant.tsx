@@ -66,10 +66,13 @@ interface ClaraAssistantProps {
 
 // Tailles de police disponibles
 const FONT_SIZES = [
-  { label: 'Petit', value: 12 },
-  { label: 'Normal', value: 14 },
-  { label: 'Grand', value: 16 },
-  { label: 'Très grand', value: 18 }
+  { label: 'Très petit', value: 12 },
+  { label: 'Petit', value: 14 },
+  { label: 'Normal', value: 16 },
+  { label: 'Grand', value: 18 },
+  { label: 'Très grand', value: 20 },
+  { label: 'Énorme', value: 24 },
+  { label: 'Maximum', value: 28 }
 ]
 
 export function ClaraAssistant({

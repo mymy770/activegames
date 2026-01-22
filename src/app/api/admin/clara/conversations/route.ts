@@ -12,10 +12,11 @@ import { verifyApiPermission } from '@/lib/permissions'
 // GET - Liste des conversations
 export async function GET() {
   try {
-    const { success, errorResponse, userId } = await verifyApiPermission('orders', 'view')
-    if (!success || !userId) {
-      return errorResponse
+    const { success, errorResponse, user } = await verifyApiPermission('orders', 'view')
+    if (!success || !user) {
+      return errorResponse || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const userId = user.id
 
     const supabase = createServiceRoleClient()
 
@@ -63,10 +64,11 @@ export async function GET() {
 // PATCH - Renommer une conversation
 export async function PATCH(request: NextRequest) {
   try {
-    const { success, errorResponse, userId } = await verifyApiPermission('orders', 'view')
-    if (!success || !userId) {
-      return errorResponse
+    const { success, errorResponse, user } = await verifyApiPermission('orders', 'view')
+    if (!success || !user) {
+      return errorResponse || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const userId = user.id
 
     const { conversationId, title } = await request.json()
 
@@ -110,10 +112,11 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Supprimer une conversation
 export async function DELETE(request: NextRequest) {
   try {
-    const { success, errorResponse, userId } = await verifyApiPermission('orders', 'view')
-    if (!success || !userId) {
-      return errorResponse
+    const { success, errorResponse, user } = await verifyApiPermission('orders', 'view')
+    if (!success || !user) {
+      return errorResponse || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const userId = user.id
 
     const { conversationId } = await request.json()
 
